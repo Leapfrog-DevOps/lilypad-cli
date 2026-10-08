@@ -14,7 +14,7 @@ url="http://127.0.0.1:$(cat "$work/port")/"   # http only for the mock; installe
 pass=0
 ok() { pass=$((pass + 1)); echo "ok - $*"; }
 bad() { echo "FAIL - $*"; exit 1; }
-cli="$here/bin/lilypad"
+cli="${CLI:-$here/bin/lilypad}"   # CLI=<path> runs the same tests against another build (e.g. the internal CLI)
 last() { tail -n1 "$work/log"; }
 
 out="$(env -u LILYPAD_URL "$cli" whoami 2>&1 || true)"
@@ -92,4 +92,56 @@ LILYPAD_URL="http://x" bash "$here/install.sh" >/dev/null 2>&1 && bad "installer
 ok "installer rejects non-https URL"
 out="$(env -u LILYPAD_URL HOME="$work/empty" "$cli" --how-to)"; grep -q "Lilypad: how to deploy a demo" <<<"$out" || bad "how-to"
 ok "--how-to prints the guide without a URL or network"
+
+# --- setup --conf -------------------------------------------------------------------
+sent() { wc -l <"$work/log" | tr -d ' '; }
+mkdir -p "$work/proj"
+cat >"$work/proj/app.env" <<'EOF'
+FOO=bar
+EOF
+printf '\xef\xbb\xbf# comment\r\nexport NAME=confdemo   # inline comment\r\nREPO="https://github.com/o/r"\r\nCLIENT=\r\nBRANCH='"'"'dev'"'"'\r\nPORT=3000\r\nHEALTH=/health # ok\r\nSIZE=tiny\r\nENV_FILE=app.env\r\n' >"$work/proj/demoproject.conf"
+before="$(sent)"
+GITHUB_PAT=github_pat_x "$cli" setup --conf "$work/proj/demoproject.conf" >/dev/null </dev/null
+a="$(last | jq -c '.body')"
+[ "$(jq -r .action <<<"$a")" = setup ] && [ "$(jq -r .name <<<"$a")" = confdemo ] || bad "conf name: $a"
+[ "$(jq -r .args.repoUrl <<<"$a")" = https://github.com/o/r ] && [ "$(jq -r .args.branch <<<"$a")" = dev ] || bad "conf repo/branch (quotes): $a"
+[ "$(jq -r .args.port <<<"$a")" = 3000 ] && [ "$(jq -r .args.healthPath <<<"$a")" = /health ] && [ "$(jq -r .args.size <<<"$a")" = tiny ] || bad "conf port/health/size: $a"
+[ "$(jq -r '.args.client // "none"' <<<"$a")" = none ] || bad "empty CLIENT must be omitted: $a"
+[ "$(jq -r .args.env <<<"$a")" = "FOO=bar" ] || bad "relative ENV_FILE not resolved against the conf folder: $a"
+ok "setup --conf (BOM, CRLF, export, quotes, inline comments, relative ENV_FILE)"
+
+GITHUB_PAT=github_pat_x "$cli" setup renamed --conf "$work/proj/demoproject.conf" --size small --port 4000 >/dev/null </dev/null
+a="$(last | jq -c '.body')"
+[ "$(jq -r .name <<<"$a")" = renamed ] && [ "$(jq -r .args.size <<<"$a")" = small ] && [ "$(jq -r .args.port <<<"$a")" = 4000 ] && [ "$(jq -r .args.branch <<<"$a")" = dev ] || bad "precedence: $a"
+ok "command-line options and <name> override the conf file"
+
+n="$(sent)"
+conf_err() { # conf_err <expected text> <conf content>
+  printf '%b' "$2" >"$work/bad.conf"
+  out="$(GITHUB_PAT=x "$cli" setup --conf "$work/bad.conf" 2>&1 </dev/null)" && bad "accepted: $2"
+  grep -q -- "$1" <<<"$out" || bad "wanted '$1' in: $out"
+  [ "$(sent)" = "$n" ] || bad "a request was sent for: $2"
+}
+conf_err "bad.conf:2: unknown key COLOR" 'NAME=a\nCOLOR=red\n'
+conf_err "bad.conf:2: REPO is set twice" 'REPO=a\nREPO=b\n'
+conf_err "GitHub PAT cannot be set in a conf file" 'GITHUB_PAT=github_pat_zzz\n'
+conf_err "bad.conf:1: expected KEY=VALUE" 'just words\n'
+conf_err "missing closing quote" 'NAME="abc\n'
+conf_err "setup needs --repo" 'NAME=abc\n'
+conf_err "setup needs a demo name" 'REPO=https://github.com/o/r\n'
+"$cli" setup --conf "$work/nope.conf" >/dev/null 2>&1 </dev/null && bad "missing conf accepted" || true
+ok "conf errors name the line and send nothing"
+
+rm -f "$work/pwned"
+printf 'NAME=safe\nREPO=https://github.com/o/r\nHEALTH=$(touch %s/pwned)\nPORT=`touch %s/pwned`\n' "$work" "$work" >"$work/evil.conf"
+GITHUB_PAT=x "$cli" setup --conf "$work/evil.conf" >/dev/null 2>&1 </dev/null || true
+[ ! -e "$work/pwned" ] || bad "conf file content was executed"
+ok "conf file is data, never executed"
+
+"$cli" setup --sample >"$work/sample.out"
+cmp -s "$work/sample.out" "$here/demoproject.sample.conf" || bad "--sample differs from demoproject.sample.conf"
+GITHUB_PAT=x "$cli" setup --conf "$work/sample.out" >/dev/null 2>&1 </dev/null || bad "the sample conf is not accepted as is"
+[ "$(last | jq -r .body.name)" = acme-poc ] || bad "sample name"
+ok "--sample prints the sample, and the sample is a valid conf"
+
 echo "all $pass passed"

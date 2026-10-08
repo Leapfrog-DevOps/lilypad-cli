@@ -41,6 +41,34 @@ lilypad status acme-poc
 
 Optional client: `lilypad setup shop --client acme --repo ...` serves the demo at `<name>-<client>` (`shop-acme`) and tags it `Client=acme`. The demo is still addressed by its name (`lilypad status shop`). The client can change until the first deploy and is fixed after that. `lilypad list --client acme` shows one client's demos. The client appears in the demo's URL, so use a code name where the client should not be named.
 
+### Conf file
+
+Instead of typing every option, keep them in a `.env`-style file and pass it with `--conf`:
+
+```bash
+lilypad setup --sample > demoproject.conf   # a documented template (same as [demoproject.sample.conf](demoproject.sample.conf))
+# edit demoproject.conf, then:
+lilypad setup --conf demoproject.conf
+```
+
+One `KEY=VALUE` per line; `#` starts a comment; values may be quoted. The keys are the `setup` options:
+
+| Key | Option | Notes |
+|---|---|---|
+| `NAME` | `<name>` | Project name. Optional if you pass `<name>` on the command line. |
+| `REPO` | `--repo` | Required (here or as `--repo`). |
+| `CLIENT` | `--client` | Optional. |
+| `BRANCH` | `--branch` | Default `main`. |
+| `PORT` | `--port` | Default `8080`. |
+| `HEALTH` | `--health` | Default `/`. |
+| `SIZE` | `--size` | Default `small`. |
+| `ENV_FILE` | `--env-file` | A relative path is relative to the conf file. Leave it out to clear the demo's env vars. |
+
+- A command-line option beats the same key in the file, and `<name>` beats `NAME`: `lilypad setup --conf demoproject.conf --size tiny`.
+- The file is read as text, never run. An unknown or repeated key is an error that names the line, and nothing is sent.
+- **The GitHub PAT is not a conf key** (it would end up in files and repos). Use `GITHUB_PAT` or the hidden prompt.
+- `setup` still replaces the whole config on every run, so the file is the one place to edit and rerun.
+
 `lilypad --how-to` prints a step-by-step guide to deploying a demo. `lilypad --help` lists everything; `lilypad <command> --help` explains one command. The GitHub PAT for `setup` is read from `$GITHUB_PAT` or a hidden prompt, never from an option.
 
 ## Files and variables

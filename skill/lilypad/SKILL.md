@@ -56,6 +56,7 @@ lilypad whoami
 ## Deploy workflow
 
 1. `lilypad setup <name> --repo https://github.com/<org>/<repo> [--client C] [--branch B] [--port N] [--health /path] [--size tiny|small|medium|large] [--env-file FILE]`
+   - **Conf file**: with several options, offer to write them to a `demoproject.conf` (`.env` style: `NAME REPO CLIENT BRANCH PORT HEALTH SIZE ENV_FILE`; `lilypad setup --sample` prints a template) and run `lilypad setup --conf demoproject.conf`. Command-line options override the file. **Never put the PAT or any secret in it**: it is not a conf key and the CLI rejects it.
    - Saves config only. Rerunning **replaces the whole config**: repeat every option to keep it. Omitting `--env-file` clears env vars. Omitting `--client` keeps the stored client; the client is fixed once deployed (destroy and set up again to change it).
    - **GitHub PAT**: fine-grained, read-only Contents on that one repo. Read from `$GITHUB_PAT` or a hidden prompt, never an option. Needed on first setup and on any setup of a destroyed name, even your own. Blank on rerun of a live demo keeps the stored one.
    - A prompt cannot run in an agent shell, and env set in one Bash call does not persist to the next. Do not ask the user to paste a PAT into chat, and never put a literal PAT in a command (it lands in the transcript). Ways to supply it:
@@ -71,7 +72,7 @@ lilypad whoami
      4. Claude.ai has no user shell, so typing the PAT in chat is the only way there: say it is not recommended first, and suggest running `setup` locally instead.
 2. `lilypad status <name> | jq -r .data.lastMessage` should say "Repo readable, Dockerfile found". If token or Dockerfile error, fix and rerun `setup`.
 3. `lilypad create <name>` (alias `deploy`). Async. Then poll `lilypad status <name> | jq -r .message` about once a minute. BUILDING 3-5 min, DEPLOYING 2-5 min, then RUNNING with `Settled: yes`. Give the user the URL.
-4. Changes: edit via `setup` (all options again), then `lilypad redeploy <name>`.
+4. Changes: edit the conf file (or repeat all `setup` options) and rerun `setup`, then `lilypad redeploy <name>`.
 5. Other: `lilypad logs <name> [lines]` (default 50, max 500), `lilypad extend <name>` (now + 30 days, 90-day lifetime cap), `lilypad list [--client C]`, `lilypad destroy <name>`.
 
 Name rule: `^[a-z][a-z0-9-]{1,22}[a-z0-9]$` (3-24 chars). Reserved: www, api, admin, app, mail, status, help, test, core, dns.

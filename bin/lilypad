@@ -9,9 +9,10 @@
 #   lilypad logout                            delete the saved key
 #   lilypad whoami                            your email and key expiry
 #   lilypad list [--client C]                 active demos, optionally one client's
-#   lilypad setup <name> --repo <url> [--client C] [--branch B] [--port N] [--health /path]
-#                  [--size tiny|small|medium|large] [--env-file FILE]
+#   lilypad setup [<name>] [--conf FILE] [--repo <url>] [--client C] [--branch B] [--port N]
+#                  [--health /path] [--size tiny|small|medium|large] [--env-file FILE]
 #                                             save config (GitHub PAT from $GITHUB_PAT or a hidden prompt)
+#   lilypad setup --sample                    print a sample conf file: lilypad setup --sample > demoproject.conf
 #   lilypad create|redeploy|status|extend|destroy <name>   (deploy = create)
 #   lilypad logs <name> [lines]               default 50, max 500
 #   lilypad '<json>' | lilypad -            raw JSON body (JSON as an argument, or on stdin)
@@ -57,8 +58,14 @@ Demos are deleted after 30 days.
       export GITHUB_PAT=github_pat_...
 
 5. Save the demo's configuration (nothing is deployed yet)
+   Easiest: keep the settings in a conf file.
+      lilypad setup --sample > demoproject.conf     # a documented template
+      (edit demoproject.conf: NAME, REPO, PORT, HEALTH, SIZE, ...)
+      lilypad setup --conf demoproject.conf
+   Or give everything as options (these override the file):
       lilypad setup shop --client acme --repo https://github.com/<org>/<repo> \
         --port 3000 --health /health --size small [--branch main] [--env-file app.env]
+   The GitHub PAT is never read from the conf file (step 4).
    Name (the project): 3-24 chars, lowercase letters, digits, hyphens, starts with a letter.
    Client (optional): 1-20 chars, lowercase letters, digits, hyphens. The address becomes
    <name>-<client> (shop-acme) and every resource is tagged Client=acme. Fixed once deployed.
@@ -72,7 +79,7 @@ Demos are deleted after 30 days.
 
 7. Change something
    - New code: push it, then  lilypad redeploy acme-poc
-   - New settings: run setup again with EVERY option you want to keep, then redeploy.
+   - New settings: edit the conf file and run setup again (or repeat EVERY option you want to keep), then redeploy.
 
 8. When it fails or misbehaves
       lilypad status acme-poc | jq -r .message
@@ -87,6 +94,96 @@ Demos are deleted after 30 days.
 
 More: lilypad --help, lilypad <command> --help.
 EOT
+}
+
+# Prints the sample conf file (same text as demoproject.sample.conf).
+sample_conf() {
+  cat <<'EOT'
+# Lilypad demo configuration (.env style: KEY=VALUE, one per line, # starts a comment).
+# Save as demoproject.conf, edit, then run:
+#
+#   lilypad setup --conf demoproject.conf
+#
+# Command-line options override the same key here. The GitHub PAT is NOT set in this file:
+# export GITHUB_PAT=... or type it at the hidden prompt.
+
+# Project name: 3-24 chars, lowercase letters, digits, hyphens; starts with a letter.
+NAME=acme-poc
+
+# Required. The repo to build (needs a Dockerfile at the root).
+REPO=https://github.com/your-org/your-repo
+
+# Optional client, 1-20 chars (lowercase letters, digits, hyphens). The address becomes
+# <name>-<client> and the demo is tagged Client=<client>. Fixed after the first deploy.
+# CLIENT=acme
+
+BRANCH=main
+PORT=8080
+
+# A path that returns 200-399 without a login.
+HEALTH=/
+
+# tiny | small | medium | large (large is admin-only)
+SIZE=small
+
+# Optional file of KEY=VALUE environment variables for the demo itself (no real secrets).
+# A relative path is relative to this file. Leave it out to clear the demo's env vars.
+# ENV_FILE=app.env
+EOT
+}
+
+# Reads a .env-style conf file for `setup` into c_* variables and c_seen. The file is parsed as
+# text and never sourced or evaluated.
+read_conf() { # read_conf <file>
+  local file="$1" line n=0 key val q rest after
+  [ -r "$file" ] || die "cannot read $file"
+  c_seen=" "
+  while IFS= read -r line || [ -n "$line" ]; do
+    n=$((n + 1))
+    line="${line%$'\r'}"
+    if [ "$n" -eq 1 ]; then line="${line#$'\xef\xbb\xbf'}"; fi
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    case "$line" in '' | '#'*) continue ;; esac
+    case "$line" in export[[:space:]]*) line="${line#export}"; line="${line#"${line%%[![:space:]]*}"}" ;; esac
+    case "$line" in *=*) ;; *) die "$file:$n: expected KEY=VALUE" ;; esac
+    key="${line%%=*}"
+    key="${key%"${key##*[![:space:]]}"}"
+    val="${line#*=}"
+    val="${val#"${val%%[![:space:]]*}"}"
+    case "$key" in '' | *[!A-Za-z0-9_]*) die "$file:$n: '$key' is not a valid key name" ;; esac
+    case "$val" in
+      \"* | \'*)
+        q="${val:0:1}"
+        rest="${val:1}"
+        case "$rest" in *"$q"*) ;; *) die "$file:$n: missing closing quote for $key" ;; esac
+        after="${rest#*"$q"}"
+        val="${rest%%"$q"*}"
+        after="${after#"${after%%[![:space:]]*}"}"
+        case "$after" in '' | '#'*) ;; *) die "$file:$n: unexpected text after the closing quote for $key" ;; esac
+        ;;
+      '#'*) val="" ;;
+      *)
+        case "$val" in *[[:space:]]'#'*) val="${val%%[[:space:]]#*}" ;; esac
+        val="${val%"${val##*[![:space:]]}"}"
+        ;;
+    esac
+    case "$c_seen" in *" $key "*) die "$file:$n: $key is set twice" ;; esac
+    c_seen="$c_seen$key "
+    case "$key" in
+      NAME) c_name="$val" ;;
+      REPO) c_repo="$val" ;;
+      CLIENT) c_client="$val" ;;
+      BRANCH) c_branch="$val" ;;
+      PORT) c_port="$val" ;;
+      HEALTH) c_health="$val" ;;
+      SIZE) c_size="$val" ;;
+      ENV_FILE) c_env_file="$val" ;;
+      GITHUB_PAT | PAT | GITHUB_TOKEN)
+        die "$file:$n: the GitHub PAT cannot be set in a conf file; use \$GITHUB_PAT or the hidden prompt" ;;
+      *) die "$file:$n: unknown key $key (supported: NAME REPO CLIENT BRANCH PORT HEALTH SIZE ENV_FILE)" ;;
+    esac
+  done <"$file"
 }
 
 # Per-command help: `lilypad <command> --help` or `lilypad help <command>`. Printed to stdout, exit 0.
@@ -152,7 +249,8 @@ Options:
 EOT
       ;;
     setup) cat <<'EOT'
-lilypad setup <name> --repo <url> [options]
+lilypad setup [<name>] [--conf <file>] [options]
+lilypad setup --sample
 
 Save a demo's configuration. Nothing is deployed: run `lilypad create <name>` afterwards.
 The repo and Dockerfile are checked in the background; poll `lilypad status <name>` for the result.
@@ -163,7 +261,7 @@ GitHub PAT is carried over when left blank, except on a destroyed name (fresh st
                       with a letter. Served at https://<name>.<the platform's demo domain>
 
 Options:
-  --repo <url>        required. https://github.com/<org>/<repo>
+  --repo <url>        required (or REPO in the conf file). https://github.com/<org>/<repo>
   --client <client>   optional client, 1 to 20 chars: lowercase letters, digits, hyphens.
                       The address becomes <name>-<client> and every resource is tagged
                       Client=<client>. Can change until the first deploy; after that it is
@@ -176,6 +274,14 @@ Options:
   --env-file <file>   KEY=VALUE per line, keys match [A-Z_][A-Z0-9_]*. Visible to anyone with
                       the platform operators, so no real secrets. Omit to clear.
 
+Conf file (--conf <file>):
+  Keep the options in a .env-style file: one KEY=VALUE per line, # starts a comment, values may
+  be quoted. Keys: NAME REPO CLIENT BRANCH PORT HEALTH SIZE ENV_FILE (the options above;
+  ENV_FILE is --env-file, a relative path is relative to the conf file). The file is read as
+  text, never run. Unknown or repeated keys are errors. The GitHub PAT is NOT a conf key.
+  A command-line option beats the same key in the file; <name> beats NAME.
+  --sample            print a documented sample conf:  lilypad setup --sample > demoproject.conf
+
 GitHub PAT (fine-grained, read-only Contents on that one repo):
   Set $GITHUB_PAT, or type it at the hidden prompt. It is never taken as an option, so it stays
   out of shell history and `ps`. Required on first setup and on any setup of a destroyed name, even your own.
@@ -183,6 +289,7 @@ GitHub PAT (fine-grained, read-only Contents on that one repo):
 Example:
   GITHUB_PAT=github_pat_... lilypad setup shop --client acme \
     --repo https://github.com/your-org/shop --port 3000 --health /health --size tiny
+  GITHUB_PAT=github_pat_... lilypad setup --conf demoproject.conf
 EOT
       ;;
     create|deploy) cat <<'EOT'
@@ -294,6 +401,13 @@ case "$action" in
     echo "key saved to $key_file"
     exit 0
     ;;
+  setup)
+    if [ "${1:-}" = "--sample" ]; then
+      [ $# -eq 1 ] || usage
+      sample_conf
+      exit 0
+    fi
+    ;;
   logout)
     rm -f "$key_file"
     echo "key removed"
@@ -364,25 +478,48 @@ case "$action" in
   setup)
     [ $# -ge 1 ] || usage
     need_jq
-    name="$1"
-    case "$name" in -*) die "setup needs a demo name first: lilypad setup <name> --repo <url> ..." ;; esac
-    shift
+    name="" conf=""
     repo="" client="" branch="" port="" health="" size="" env_file=""
+    o_seen=" "
+    case "$1" in -*) ;; *) name="$1"; o_seen=" name "; shift ;; esac
     while [ $# -gt 0 ]; do
       [ $# -ge 2 ] || die "$1 needs a value"
       case "$1" in
-        --repo) repo="$2" ;;
-        --client) client="$2" ;;
-        --branch) branch="$2" ;;
-        --port) port="$2" ;;
-        --health) health="$2" ;;
-        --size) size="$2" ;;
-        --env-file) env_file="$2" ;;
+        --conf) conf="$2" ;;
+        --repo) repo="$2"; o_seen="$o_seen""repo " ;;
+        --client) client="$2"; o_seen="$o_seen""client " ;;
+        --branch) branch="$2"; o_seen="$o_seen""branch " ;;
+        --port) port="$2"; o_seen="$o_seen""port " ;;
+        --health) health="$2"; o_seen="$o_seen""health " ;;
+        --size) size="$2"; o_seen="$o_seen""size " ;;
+        --env-file) env_file="$2"; o_seen="$o_seen""env_file " ;;
         *) die "unknown option $1 (see: lilypad --help)" ;;
       esac
       shift 2
     done
-    [ -n "$repo" ] || die "setup needs --repo https://github.com/<org>/<repo>"
+    if [ -n "$conf" ]; then
+      c_name="" c_repo="" c_client="" c_branch="" c_port="" c_health="" c_size="" c_env_file="" c_seen=" "
+      read_conf "$conf"
+      # Command-line options beat the file.
+      case "$o_seen" in *" name "*) ;; *) name="$c_name" ;; esac
+      case "$o_seen" in *" repo "*) ;; *) repo="$c_repo" ;; esac
+      case "$o_seen" in *" client "*) ;; *) client="$c_client" ;; esac
+      case "$o_seen" in *" branch "*) ;; *) branch="$c_branch" ;; esac
+      case "$o_seen" in *" port "*) ;; *) port="$c_port" ;; esac
+      case "$o_seen" in *" health "*) ;; *) health="$c_health" ;; esac
+      case "$o_seen" in *" size "*) ;; *) size="$c_size" ;; esac
+      case "$o_seen" in
+        *" env_file "*) ;;
+        *)
+          env_file="$c_env_file"
+          # A relative ENV_FILE in a conf file is relative to that file.
+          case "$env_file" in '' | /* | [A-Za-z]:*) ;; *) env_file="$(dirname "$conf")/$env_file" ;; esac
+          ;;
+      esac
+    fi
+    [ -n "$name" ] || die "setup needs a demo name: lilypad setup <name> ... (or NAME= in the conf file)"
+    case "$name" in -*) die "setup needs a demo name first: lilypad setup <name> --repo <url> ..." ;; esac
+    [ -n "$repo" ] || die "setup needs --repo https://github.com/<org>/<repo> (or REPO= in the conf file)"
     env_text=""
     if [ -n "$env_file" ]; then
       [ -r "$env_file" ] || die "cannot read $env_file"

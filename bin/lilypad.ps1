@@ -2,7 +2,8 @@
 # Lilypad CLI for Windows PowerShell 5.1 and PowerShell 7+. Same commands as the bash CLI.
 #   lilypad auth <email> | login <key> | logout | whoami
 #   lilypad list [--client C]
-#   lilypad setup <name> --repo <url> [--client C] [--branch B] [--port N] [--health /p] [--size S] [--env-file F]
+#   lilypad setup [<name>] [--conf FILE] [--repo <url>] [--client C] [--branch B] [--port N] [--health /p] [--size S] [--env-file F]
+#   lilypad setup --sample > demoproject.conf   (a documented sample conf file)
 #   lilypad create|redeploy|status|extend|destroy <name> | logs <name> [lines]
 #   lilypad config url <URL> | update | '<json>' | - | --how-to
 # Key: $env:LILYPAD_KEY, else %APPDATA%\lilypad\key. URL: $env:LILYPAD_URL, else %APPDATA%\lilypad\url.
@@ -11,7 +12,7 @@ $Version = '1.0.0'
 
 function Die([string]$msg) { [Console]::Error.WriteLine("lilypad: $msg"); exit 1 }
 function Usage {
-  Get-Content $PSCommandPath | Select-Object -Skip 1 -First 7 | ForEach-Object { [Console]::Error.WriteLine(($_ -replace '^# ?', '')) }
+  Get-Content $PSCommandPath | Select-Object -Skip 1 -First 8 | ForEach-Object { [Console]::Error.WriteLine(($_ -replace '^# ?', '')) }
   exit 2
 }
 
@@ -52,8 +53,14 @@ Demos are deleted after 30 days.
       $env:GITHUB_PAT = 'github_pat_...'
 
 5. Save the demo's configuration (nothing is deployed yet)
+   Easiest: keep the settings in a conf file.
+      lilypad setup --sample > demoproject.conf     # a documented template
+      (edit demoproject.conf: NAME, REPO, PORT, HEALTH, SIZE, ...)
+      lilypad setup --conf demoproject.conf
+   Or give everything as options (these override the file):
       lilypad setup shop --client acme --repo https://github.com/<org>/<repo>  `
         --port 3000 --health /health --size small [--branch main] [--env-file app.env]
+   The GitHub PAT is never read from the conf file (step 4).
    Name (the project): 3-24 chars, lowercase letters, digits, hyphens, starts with a letter.
    Client (optional): 1-20 chars, lowercase letters, digits, hyphens. The address becomes
    <name>-<client> (shop-acme) and every resource is tagged Client=acme. Fixed once deployed.
@@ -67,7 +74,7 @@ Demos are deleted after 30 days.
 
 7. Change something
    - New code: push it, then  lilypad redeploy acme-poc
-   - New settings: run setup again with EVERY option you want to keep, then redeploy.
+   - New settings: edit the conf file and run setup again (or repeat EVERY option you want to keep), then redeploy.
 
 8. When it fails or misbehaves
       lilypad status acme-poc
@@ -82,6 +89,80 @@ Demos are deleted after 30 days.
 
 More: lilypad --help, lilypad <command> --help.
 '@ | Write-Output
+}
+
+function Sample {
+  @'
+# Lilypad demo configuration (.env style: KEY=VALUE, one per line, # starts a comment).
+# Save as demoproject.conf, edit, then run:
+#
+#   lilypad setup --conf demoproject.conf
+#
+# Command-line options override the same key here. The GitHub PAT is NOT set in this file:
+# export GITHUB_PAT=... or type it at the hidden prompt.
+
+# Project name: 3-24 chars, lowercase letters, digits, hyphens; starts with a letter.
+NAME=acme-poc
+
+# Required. The repo to build (needs a Dockerfile at the root).
+REPO=https://github.com/your-org/your-repo
+
+# Optional client, 1-20 chars (lowercase letters, digits, hyphens). The address becomes
+# <name>-<client> and the demo is tagged Client=<client>. Fixed after the first deploy.
+# CLIENT=acme
+
+BRANCH=main
+PORT=8080
+
+# A path that returns 200-399 without a login.
+HEALTH=/
+
+# tiny | small | medium | large (large is admin-only)
+SIZE=small
+
+# Optional file of KEY=VALUE environment variables for the demo itself (no real secrets).
+# A relative path is relative to this file. Leave it out to clear the demo's env vars.
+# ENV_FILE=app.env
+'@ | Write-Output
+}
+
+# Reads a .env-style conf file for `setup`. Parsed as text, never evaluated.
+function Read-Conf([string]$file) {
+  if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { Die "cannot read $file" }
+  $res = @{}
+  $n = 0
+  foreach ($raw in [IO.File]::ReadAllLines((Resolve-Path -LiteralPath $file).Path)) {
+    $n++
+    $line = $raw.TrimEnd("`r")
+    if ($n -eq 1) { $line = $line.TrimStart([char]0xFEFF) }
+    $line = $line.Trim()
+    if ($line -eq '' -or $line.StartsWith('#')) { continue }
+    if ($line -match '^export\s+(.*)$') { $line = $Matches[1] }
+    $eq = $line.IndexOf('=')
+    if ($eq -lt 1) { Die "${file}:${n}: expected KEY=VALUE" }
+    $key = $line.Substring(0, $eq).Trim()
+    $val = $line.Substring($eq + 1).TrimStart()
+    if ($key -notmatch '^[A-Za-z0-9_]+$') { Die "${file}:${n}: '$key' is not a valid key name" }
+    if ($val.Length -gt 0 -and ($val[0] -eq '"' -or $val[0] -eq "'")) {
+      $q = $val[0]
+      $close = $val.IndexOf($q, 1)
+      if ($close -lt 0) { Die "${file}:${n}: missing closing quote for $key" }
+      $after = $val.Substring($close + 1).Trim()
+      if ($after -ne '' -and -not $after.StartsWith('#')) { Die "${file}:${n}: unexpected text after the closing quote for $key" }
+      $val = $val.Substring(1, $close - 1)
+    } elseif ($val.StartsWith('#')) {
+      $val = ''
+    } else {
+      $val = ($val -replace '\s+#.*$', '').TrimEnd()
+    }
+    if ($res.ContainsKey($key)) { Die "${file}:${n}: $key is set twice" }
+    switch ($key) {
+      { $_ -in 'NAME', 'REPO', 'CLIENT', 'BRANCH', 'PORT', 'HEALTH', 'SIZE', 'ENV_FILE' } { $res[$key] = $val }
+      { $_ -in 'GITHUB_PAT', 'PAT', 'GITHUB_TOKEN' } { Die "${file}:${n}: the GitHub PAT cannot be set in a conf file; use `$env:GITHUB_PAT or the hidden prompt" }
+      default { Die "${file}:${n}: unknown key $key (supported: NAME REPO CLIENT BRANCH PORT HEALTH SIZE ENV_FILE)" }
+    }
+  }
+  return $res
 }
 
 if ($args.Count -ge 1 -and $args[0] -in '--how-to', 'how-to') { HowTo; exit 0 }
@@ -110,6 +191,7 @@ switch ($action) {
     Save-Private $keyFile $rest[0]
     Write-Output "key saved to $keyFile"; exit 0
   }
+  'setup' { if ($rest.Count -ge 1 -and $rest[0] -eq '--sample') { if ($rest.Count -ne 1) { Usage }; Sample; exit 0 } }
   'logout' { Remove-Item -Force -ErrorAction SilentlyContinue $keyFile; Write-Output 'key removed'; exit 0 }
   'config' {
     if ($rest.Count -ne 2 -or $rest[0] -ne 'url') { Usage }
@@ -167,28 +249,46 @@ switch -Regex ($action) {
   }
   '^setup$' {
     if ($rest.Count -lt 1) { Usage }
-    $name = $rest[0]
-    if ($name.StartsWith('-')) { Die 'setup needs a demo name first: lilypad setup <name> --repo <url> ...' }
+    $name = ''
+    $conf = ''
+    $envPath = ''
     $opt = @{}
-    $i = 1
+    $flag = @{}   # which options were given on the command line; they beat the conf file
+    $i = 0
+    if (-not $rest[0].StartsWith('-')) { $name = $rest[0]; $flag['NAME'] = $true; $i = 1 }
     while ($i -lt $rest.Count) {
       if ($i + 1 -ge $rest.Count) { Die "$($rest[$i]) needs a value" }
+      $v = $rest[$i + 1]
       switch ($rest[$i]) {
-        '--repo'     { $opt.repoUrl = $rest[$i + 1] }
-        '--client'   { if ($rest[$i + 1]) { $opt.client = $rest[$i + 1] } }
-        '--branch'   { $opt.branch = $rest[$i + 1] }
-        '--port'     { $opt.port = $rest[$i + 1] }
-        '--health'   { $opt.healthPath = $rest[$i + 1] }
-        '--size'     { $opt.size = $rest[$i + 1] }
-        '--env-file' {
-          if (-not (Test-Path $rest[$i + 1])) { Die "cannot read $($rest[$i + 1])" }
-          $opt.env = [IO.File]::ReadAllText((Resolve-Path $rest[$i + 1]))
-        }
+        '--conf'     { $conf = $v }
+        '--repo'     { $opt.repoUrl = $v; $flag['REPO'] = $true }
+        '--client'   { if ($v) { $opt.client = $v }; $flag['CLIENT'] = $true }
+        '--branch'   { $opt.branch = $v; $flag['BRANCH'] = $true }
+        '--port'     { $opt.port = $v; $flag['PORT'] = $true }
+        '--health'   { $opt.healthPath = $v; $flag['HEALTH'] = $true }
+        '--size'     { $opt.size = $v; $flag['SIZE'] = $true }
+        '--env-file' { $envPath = $v; $flag['ENV_FILE'] = $true }
         default { Die "unknown option $($rest[$i]) (see: lilypad --help)" }
       }
       $i += 2
     }
-    if (-not $opt.repoUrl) { Die 'setup needs --repo https://github.com/<org>/<repo>' }
+    if ($conf) {
+      $c = Read-Conf $conf
+      if (-not $flag['NAME'] -and $c['NAME']) { $name = $c['NAME'] }
+      $map = @{ REPO = 'repoUrl'; CLIENT = 'client'; BRANCH = 'branch'; PORT = 'port'; HEALTH = 'healthPath'; SIZE = 'size' }
+      foreach ($k in $map.Keys) { if ($c[$k] -and -not $flag[$k]) { $opt[$map[$k]] = $c[$k] } }
+      if (-not $flag['ENV_FILE'] -and $c['ENV_FILE']) {
+        $envPath = $c['ENV_FILE']
+        # A relative ENV_FILE in a conf file is relative to that file.
+        if (-not [IO.Path]::IsPathRooted($envPath)) { $envPath = Join-Path (Split-Path (Resolve-Path -LiteralPath $conf).Path) $envPath }
+      }
+    }
+    if ($envPath) {
+      if (-not (Test-Path -LiteralPath $envPath)) { Die "cannot read $envPath" }
+      $opt.env = [IO.File]::ReadAllText((Resolve-Path -LiteralPath $envPath).Path)
+    }
+    if (-not $name) { Die 'setup needs a demo name: lilypad setup <name> ... (or NAME= in the conf file)' }
+    if (-not $opt.repoUrl) { Die 'setup needs --repo https://github.com/<org>/<repo> (or REPO= in the conf file)' }
     # The PAT never goes on the command line. Blank keeps the one already stored, except on a destroyed name.
     $pat = $env:GITHUB_PAT
     if (-not $pat -and [Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {

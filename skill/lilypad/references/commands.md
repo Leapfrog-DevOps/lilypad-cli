@@ -7,8 +7,9 @@
 | `lilypad logout` | Deletes saved key. Local only. | Local |
 | `lilypad whoami` | Your email and key expiry. | Any valid key |
 | `lilypad list [--client C]` | Active demos with client, owner and expiry; optionally one client's. | Any valid key |
-| `lilypad setup <name> --repo <url> [opts]` | Saves demo config. No deploy. Rerun replaces whole config. | Anyone for new/destroyed name (fresh record, PAT required, creator too); creator after |
+| `lilypad setup [<name>] [--conf FILE] [--repo <url>] [opts]` | Saves demo config. No deploy. Rerun replaces whole config. | Anyone for new/destroyed name (fresh record, PAT required, creator too); creator after |
 | `lilypad create <name>` (alias `deploy`) | Builds repo, creates stack. Async. | Creator |
+| `lilypad setup --sample` | Prints a documented sample conf file (`> demoproject.conf`). Local only. | Local |
 | `lilypad redeploy <name>` | Rebuilds latest commit, rolls service, applies `setup` edits. Async. | Creator |
 | `lilypad status <name>` | State, URL, owner, commit, size, expiry, task counts, settled flag. | Creator or admin |
 | `lilypad logs <name> [lines]` | Container logs. Default 50, max 500. | Creator or admin |
@@ -31,6 +32,8 @@ Read just the text of a reply: `lilypad status <name> | jq -r .message`. Structu
 | `--health <path>` | `/` | Must return 200-399 with no login |
 | `--size <s>` | `small` | tiny, small, medium, large (admin only) |
 | `--env-file <file>` | none | `KEY=VALUE` per line, keys `[A-Z_][A-Z0-9_]*`. Omit to clear. |
+
+Conf file: `lilypad setup --conf demoproject.conf`. `.env` style, one `KEY=VALUE` per line, `#` comments, quotes allowed. Keys: `NAME`, `REPO`, `CLIENT`, `BRANCH`, `PORT`, `HEALTH`, `SIZE`, `ENV_FILE` (same as the options; relative `ENV_FILE` is relative to the conf file). Options on the command line override the file; `<name>` overrides `NAME`. Parsed as text, never run; unknown or repeated keys are errors with the line number. The PAT is not a conf key.
 
 PAT: `$GITHUB_PAT` or hidden prompt (TTY only). Never an option.
 

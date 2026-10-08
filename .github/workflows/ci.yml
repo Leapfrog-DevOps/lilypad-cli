@@ -29,3 +29,13 @@ jobs:
           ./bin/lilypad.ps1 login lpk_test
           ./bin/lilypad.ps1 config url https://example.invalid/x
           if ((Get-Content "$env:LILYPAD_CONFIG_DIR/url") -ne 'https://example.invalid/x') { exit 1 }
+      - name: setup --sample and --conf (PowerShell)
+        shell: pwsh
+        run: |
+          $env:LILYPAD_CONFIG_DIR = Join-Path $env:RUNNER_TEMP 'cfg2'
+          $out = ./bin/lilypad.ps1 setup --sample | Out-String
+          if ($out.Trim() -ne (Get-Content -Raw demoproject.sample.conf).Trim()) { Write-Error 'sample differs'; exit 1 }
+          # An invalid conf must fail before any request is made (no URL is configured here, so a request would fail differently).
+          Set-Content -Path "$env:RUNNER_TEMP/bad.conf" -Value "NAME=abc`nCOLOR=red"
+          $r = ./bin/lilypad.ps1 setup --conf "$env:RUNNER_TEMP/bad.conf" 2>&1 | Out-String
+          if ($r -notmatch 'unknown key COLOR') { Write-Error "unexpected: $r"; exit 1 }
