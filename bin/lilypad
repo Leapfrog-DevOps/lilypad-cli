@@ -1,0 +1,437 @@
+#!/usr/bin/env bash
+# Lilypad CLI. Guide: README.md in the lilypad-cli repo
+#
+#   lilypad auth <email>                      email yourself a 30-day key (replaces any earlier key)
+#   lilypad login <key>                       save the key to ~/.config/lilypad/key (mode 600)
+#   lilypad config url <URL>                  set the platform URL (the installer asks for it)
+#   lilypad update                            reinstall the latest version
+#   lilypad --how-to                          step-by-step guide: deploy a demo, use the tool
+#   lilypad logout                            delete the saved key
+#   lilypad whoami                            your email and key expiry
+#   lilypad list [--client C]                 active demos, optionally one client's
+#   lilypad setup <name> --repo <url> [--client C] [--branch B] [--port N] [--health /path]
+#                  [--size tiny|small|medium|large] [--env-file FILE]
+#                                             save config (GitHub PAT from $GITHUB_PAT or a hidden prompt)
+#   lilypad create|redeploy|status|extend|destroy <name>   (deploy = create)
+#   lilypad logs <name> [lines]               default 50, max 500
+#   lilypad '<json>' | lilypad -            raw JSON body (JSON as an argument, or on stdin)
+#   lilypad <command> --help                  what a command does and the options it takes
+#
+# Key: $LILYPAD_KEY, else ~/.config/lilypad/key. URL: $LILYPAD_URL, else ~/.config/lilypad/url.
+set -euo pipefail
+
+VERSION="1.0.0"
+
+usage() {
+  sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' >&2
+  exit 2
+}
+
+how_to() {
+  cat <<'EOT'
+Lilypad: how to deploy a demo
+
+Lilypad builds a GitHub repo (it needs a Dockerfile) and serves it at https://<name>.<the platform's demo domain>,
+or https://<name>-<client>.<the platform's demo domain> when you give a client.
+Demos are deleted after 30 days.
+
+1. One-time setup
+  The installer saved the platform URL. Check or change it:
+      lilypad config url <URL>       # https only; $LILYPAD_URL overrides
+
+2. Get an access key (your company email is your identity)
+      lilypad auth you@lftechnology.com    # exact address, no + aliases
+      lilypad login lpk_...                # paste the key from the email (check spam/junk too)
+      lilypad whoami                       # shows your email and key expiry
+
+3. Prepare the repo
+   - Dockerfile at the repo root (the branch you deploy).
+   - The app listens on one port (default 8080).
+   - A health path returns 200-399 without a login (default /). If the app is behind a login,
+     add an open /health route.
+   - No real secrets in env vars: operators can see them. Auth is the app's own job.
+
+4. Create a GitHub token for the repo
+   Fine-grained PAT, read-only "Contents" on that one repo. Give it to the CLI via the
+   environment or the hidden prompt, never as an option:
+      export GITHUB_PAT=github_pat_...
+
+5. Save the demo's configuration (nothing is deployed yet)
+      lilypad setup shop --client acme --repo https://github.com/<org>/<repo> \
+        --port 3000 --health /health --size small [--branch main] [--env-file app.env]
+   Name (the project): 3-24 chars, lowercase letters, digits, hyphens, starts with a letter.
+   Client (optional): 1-20 chars, lowercase letters, digits, hyphens. The address becomes
+   <name>-<client> (shop-acme) and every resource is tagged Client=acme. Fixed once deployed.
+   Size: tiny, small (default), medium (large is admin-only).
+   Then check it: lilypad status acme-poc   # expect "Repo readable, Dockerfile found"
+
+6. Deploy
+      lilypad create acme-poc
+   Takes 5-10 minutes. You get one email when it is live, or one if it fails.
+   Follow along with: lilypad status acme-poc   # RUNNING + settled means ready
+
+7. Change something
+   - New code: push it, then  lilypad redeploy acme-poc
+   - New settings: run setup again with EVERY option you want to keep, then redeploy.
+
+8. When it fails or misbehaves
+      lilypad status acme-poc | jq -r .message
+      lilypad logs acme-poc 200
+   Check that --port matches the container and --health returns 200-399 without a login.
+
+9. Lifecycle
+      lilypad list                 # active demos
+      lilypad extend acme-poc      # expiry = now + 30 days (90 days total at most)
+      lilypad destroy acme-poc     # permanent; the name is free for anyone afterwards
+   A warning email arrives on day 27. At most 3 active demos per person.
+
+More: lilypad --help, lilypad <command> --help.
+EOT
+}
+
+# Per-command help: `lilypad <command> --help` or `lilypad help <command>`. Printed to stdout, exit 0.
+command_help() {
+  case "$1" in
+    auth) cat <<'EOT'
+lilypad auth <email>
+
+Email yourself a 30-day access key. Do this once, then run `lilypad login <key>`.
+
+  <email>   your @lftechnology.com address, exactly (no + aliases). Checked locally first:
+            another domain is rejected without contacting the platform.
+
+Requesting a key replaces any earlier one at once. One request per address per minute.
+The email comes from "Lilypad" with subject "Your Lilypad access key". If it is not in your
+inbox within a minute, check your spam/junk folder.
+EOT
+      ;;
+    login) cat <<'EOT'
+lilypad login <key>
+
+Save the key from the email to ~/.config/lilypad/key (mode 600). Later commands send it.
+Local only: nothing is sent to the platform.
+
+  <key>     the key from the email, starts with lpk_
+
+$LILYPAD_KEY overrides the saved file (handy in CI).
+EOT
+      ;;
+    config) cat <<'EOT'
+lilypad config url <URL>
+
+Set the platform URL (https only) and save it to ~/.config/lilypad/url (mode 600).
+Local only. The installer asks for this URL; use this command to change it later.
+$LILYPAD_URL overrides the saved file.
+EOT
+      ;;
+    update) cat <<'EOT'
+lilypad update
+
+Reinstall the latest version of this CLI. Your key and URL are kept.
+EOT
+      ;;
+    logout) cat <<'EOT'
+lilypad logout
+
+Delete the saved key. Local only. The key itself stays valid until it expires or is replaced.
+EOT
+      ;;
+    whoami) cat <<'EOT'
+lilypad whoami
+
+Show the email your key belongs to and when the key expires. No options.
+EOT
+      ;;
+    list) cat <<'EOT'
+lilypad list [--client <client>]
+
+List the active demos with client, owner and expiry.
+
+Options:
+  --client <client>   only that client's demos
+EOT
+      ;;
+    setup) cat <<'EOT'
+lilypad setup <name> --repo <url> [options]
+
+Save a demo's configuration. Nothing is deployed: run `lilypad create <name>` afterwards.
+The repo and Dockerfile are checked in the background; poll `lilypad status <name>` for the result.
+Rerunning setup REPLACES the whole config: repeat every option you want to keep. Only the
+GitHub PAT is carried over when left blank, except on a destroyed name (fresh start).
+
+  <name>              project name, 3 to 24 chars: lowercase letters, digits, hyphens; starts
+                      with a letter. Served at https://<name>.<the platform's demo domain>
+
+Options:
+  --repo <url>        required. https://github.com/<org>/<repo>
+  --client <client>   optional client, 1 to 20 chars: lowercase letters, digits, hyphens.
+                      The address becomes <name>-<client> and every resource is tagged
+                      Client=<client>. Can change until the first deploy; after that it is
+                      fixed (destroy and set up again). Omit to keep it.
+  --branch <name>     branch to build. Default: main
+  --port <n>          port your container listens on, 1 to 65535. Default: 8080
+  --health <path>     path that returns 200 to 399 without a login. Default: /
+  --size <size>       tiny 256/512, small 512/1024 (default), medium 1024/2048,
+                      large 2048/4096 (CPU units / MiB). large is admin-only.
+  --env-file <file>   KEY=VALUE per line, keys match [A-Z_][A-Z0-9_]*. Visible to anyone with
+                      the platform operators, so no real secrets. Omit to clear.
+
+GitHub PAT (fine-grained, read-only Contents on that one repo):
+  Set $GITHUB_PAT, or type it at the hidden prompt. It is never taken as an option, so it stays
+  out of shell history and `ps`. Required on first setup and on any setup of a destroyed name, even your own.
+
+Example:
+  GITHUB_PAT=github_pat_... lilypad setup shop --client acme \
+    --repo https://github.com/your-org/shop --port 3000 --health /health --size tiny
+EOT
+      ;;
+    create|deploy) cat <<'EOT'
+lilypad create <name>      (alias: lilypad deploy <name>)
+
+Build the repo's image and create the demo's stack. Run `setup` first. Asynchronous: the reply
+only says "accepted". You get one email when it is live, or one if it fails.
+
+  <name>    the demo name used in setup
+
+Usually takes 5 to 10 minutes. Poll with `lilypad status <name>`. Creator only. Up to 3 active
+demos per person.
+EOT
+      ;;
+    redeploy) cat <<'EOT'
+lilypad redeploy <name>
+
+Rebuild the latest commit of the configured branch, roll the service, and apply config changes
+made with `setup`. Asynchronous; one email when it is updated, or one if it fails. Creator only.
+
+  <name>    the demo name used in setup
+EOT
+      ;;
+    status) cat <<'EOT'
+lilypad status <name>
+
+Show state (BUILDING, DEPLOYING, RUNNING, ...), URL, owner, commit, size, expiry, task counts and
+whether it has settled. Read the text alone with:  lilypad status <name> | jq -r .message
+Creator or admin.
+
+  <name>    the demo name
+EOT
+      ;;
+    logs) cat <<'EOT'
+lilypad logs <name> [lines]
+
+Print the latest container log lines. Creator or admin.
+
+  <name>    the demo name
+  [lines]   how many lines. Default: 50, max: 500
+EOT
+      ;;
+    extend) cat <<'EOT'
+lilypad extend <name>
+
+Move the expiry to 30 days from now. Total lifetime is capped at 90 days. Creator or admin.
+
+  <name>    the demo name
+EOT
+      ;;
+    destroy) cat <<'EOT'
+lilypad destroy <name>
+
+Delete the demo's stack and images. Asynchronous; finishes in a minute or two, and the name is
+then free for anyone. Cannot be undone. Creator or admin.
+
+  <name>    the demo name
+EOT
+      ;;
+    -) cat <<'EOT'
+lilypad -        (or: lilypad '<json>')
+
+Send a raw JSON body, read from stdin or given as the argument. Use stdin when the body holds a
+secret: an argument is visible in `ps`.
+
+  lilypad '{"action":"logs","name":"acme-poc","args":{"lines":100}}'
+  jq -Rs '{action:"setup",name:"acme-poc",args:{repoUrl:"...",githubPat:"...",env:.}}' app.env | lilypad -
+EOT
+      ;;
+    *) die "no help for '$1' (see: lilypad --help)" ;;
+  esac
+}
+
+die() {
+  echo "lilypad: $*" >&2
+  exit 1
+}
+
+need_jq() { command -v jq >/dev/null || die "jq is required for this command"; }
+
+case "${1:-}" in --how-to | how-to) how_to; exit 0 ;; esac
+case "${1:-}" in --version | -V) echo "lilypad $VERSION"; exit 0 ;; esac
+
+[ $# -ge 1 ] || usage
+
+config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/lilypad"
+key_file="$config_dir/key"
+url_file="$config_dir/url"
+email_domain="${LILYPAD_EMAIL_DOMAIN:-lftechnology.com}"
+action="$1"
+shift
+
+# `lilypad help <command>` and `lilypad <command> --help` print that command's help.
+if [ "$action" = help ] && [ $# -ge 1 ]; then
+  command_help "$1"
+  exit 0
+fi
+case "${1:-}" in -h | --help) command_help "$action"; exit 0 ;; esac
+
+[ "$action" = deploy ] && action=create
+
+case "$action" in
+  -h | --help | help) usage ;;
+  login)
+    [ $# -eq 1 ] || usage
+    case "$1" in lpk_*) ;; *) die "that does not look like a demo key (lpk_...)" ;; esac
+    mkdir -p "$(dirname "$key_file")"
+    (umask 077 && printf '%s\n' "$1" >"$key_file")
+    echo "key saved to $key_file"
+    exit 0
+    ;;
+  logout)
+    rm -f "$key_file"
+    echo "key removed"
+    exit 0
+    ;;
+  config)
+    [ $# -eq 2 ] && [ "$1" = url ] || usage
+    case "$2" in https://?*) ;; *) die "the URL must start with https://" ;; esac
+    case "$2" in *[[:space:]\"]*) die "the URL must not contain spaces or quotes" ;; esac
+    mkdir -p "$config_dir"
+    (umask 077 && printf '%s\n' "$2" >"$url_file")
+    echo "URL saved to $url_file"
+    exit 0
+    ;;
+  update)
+    [ $# -eq 0 ] || usage
+    src_file="$config_dir/source"
+    [ -r "$src_file" ] || die "no install source recorded; reinstall with the installer"
+    src="$(cat "$src_file")"
+    case "$src" in https://?*) ;; *) die "install source in $src_file is not an https URL" ;; esac
+    tmp="$(mktemp)"
+    trap 'rm -f "$tmp"' EXIT
+    curl -fsSL "$src/install.sh" -o "$tmp" || die "could not download $src/install.sh"
+    LILYPAD_BASE_URL="$src" bash "$tmp" --upgrade
+    exit 0
+    ;;
+esac
+
+# --- build the JSON body -------------------------------------------------------
+
+case "$action" in
+  -) body="$(cat)" ;;
+  '{'*) body="$action" ;;
+  auth)
+    [ $# -eq 1 ] || usage
+    # Same rule as the platform, checked here so a wrong address never reaches the platform.
+    email="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+    printf '%s' "$email" | grep -Eq "^[a-z0-9][a-z0-9._-]{0,63}@${email_domain//./\\.}\$" ||
+      die "'$1' is not allowed: use your plain @$email_domain address (no + aliases, no other domain)"
+    need_jq
+    body="$(jq -nc --arg email "$email" '{action: "auth", email: $email}')"
+    ;;
+  whoami)
+    [ $# -eq 0 ] || usage
+    need_jq
+    body="$(jq -nc --arg a "$action" '{action: $a}')"
+    ;;
+  list)
+    client=""
+    if [ $# -gt 0 ]; then
+      [ $# -eq 2 ] && [ "$1" = "--client" ] || usage
+      client="$2"
+    fi
+    need_jq
+    body="$(jq -nc --arg c "$client" '{action: "list"} + (if $c == "" then {} else {args: {client: $c}} end)')"
+    ;;
+  create | redeploy | status | extend | destroy)
+    [ $# -eq 1 ] || usage
+    need_jq
+    body="$(jq -nc --arg a "$action" --arg n "$1" '{action: $a, name: $n}')"
+    ;;
+  logs)
+    [ $# -ge 1 ] && [ $# -le 2 ] || usage
+    need_jq
+    body="$(jq -nc --arg n "$1" --arg l "${2:-}" \
+      '{action: "logs", name: $n} + (if $l == "" then {} else {args: {lines: $l}} end)')"
+    ;;
+  setup)
+    [ $# -ge 1 ] || usage
+    need_jq
+    name="$1"
+    case "$name" in -*) die "setup needs a demo name first: lilypad setup <name> --repo <url> ..." ;; esac
+    shift
+    repo="" client="" branch="" port="" health="" size="" env_file=""
+    while [ $# -gt 0 ]; do
+      [ $# -ge 2 ] || die "$1 needs a value"
+      case "$1" in
+        --repo) repo="$2" ;;
+        --client) client="$2" ;;
+        --branch) branch="$2" ;;
+        --port) port="$2" ;;
+        --health) health="$2" ;;
+        --size) size="$2" ;;
+        --env-file) env_file="$2" ;;
+        *) die "unknown option $1 (see: lilypad --help)" ;;
+      esac
+      shift 2
+    done
+    [ -n "$repo" ] || die "setup needs --repo https://github.com/<org>/<repo>"
+    env_text=""
+    if [ -n "$env_file" ]; then
+      [ -r "$env_file" ] || die "cannot read $env_file"
+      env_text="$(cat "$env_file")"
+    fi
+    # The PAT never goes on the command line (shell history, ps). Blank keeps the one already stored, except on a destroyed name.
+    pat="${GITHUB_PAT:-}"
+    if [ -z "$pat" ] && [ -t 0 ]; then
+      read -r -s -p "GitHub PAT (blank keeps the stored one; required for a destroyed name): " pat
+      echo >&2
+    fi
+    body="$(jq -nc --arg name "$name" --arg repo "$repo" --arg client "$client" --arg branch "$branch" \
+      --arg port "$port" --arg health "$health" --arg size "$size" --arg env "$env_text" --arg pat "$pat" '
+      {action: "setup", name: $name, args:
+        ({repoUrl: $repo, client: $client, branch: $branch, port: $port, healthPath: $health, size: $size,
+          env: $env, githubPat: $pat}
+         | with_entries(select(.value != "")))}')"
+    ;;
+  *) die "unknown command '$action' (see: lilypad --help)" ;;
+esac
+
+# --- call ------------------------------------------------------------------------
+
+url="${LILYPAD_URL:-$( [ -r "$url_file" ] && head -n1 "$url_file" || true)}"
+[ -n "$url" ] || die "no platform URL configured: run 'lilypad config url <URL>' (or re-run the installer)"
+key="${LILYPAD_KEY:-$( [ -r "$key_file" ] && cat "$key_file" || true)}"
+
+# Headers (including the key) go through a curl config on stdin so they never appear in `ps`.
+out="$(
+  {
+    echo 'header = "Content-Type: application/json"'
+    if [ -n "$key" ]; then echo "header = \"X-Lilypad-Key: $key\""; fi
+  } | curl -sS -X POST "$url" -K - -d "$body" -w $'\n%{http_code}'
+)"
+code="${out##*$'\n'}"
+resp="${out%$'\n'*}"
+
+if command -v jq >/dev/null && jq -e . >/dev/null 2>&1 <<<"$resp"; then
+  jq . <<<"$resp"
+else
+  echo "$resp"
+fi
+
+case "$code" in
+  2??)
+    if [ "$action" = auth ]; then
+      echo "lilypad: check your inbox, and your spam/junk folder, for the key (from \"Lilypad\"). Then run: lilypad login <key>" >&2
+    fi
+    ;;
+  401) die "HTTP 401: run 'lilypad auth you@$email_domain', then 'lilypad login <key>'" ;;
+  *) die "HTTP $code" ;;
+esac

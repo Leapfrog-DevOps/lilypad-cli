@@ -1,0 +1,31 @@
+name: ci
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  bash:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - run: sudo apt-get install -y shellcheck jq
+      - run: shellcheck -x -S warning bin/lilypad install.sh tools/*.sh tests/test_cli.sh
+      - run: tests/test_cli.sh
+      - run: tools/leak-scan.sh
+      - name: SHA256SUMS is current
+        run: tools/gen-sums.sh >/dev/null && git diff --exit-code SHA256SUMS
+  powershell:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          $r = 'bin/lilypad.ps1', 'install.ps1' | ForEach-Object { Invoke-ScriptAnalyzer -Path $_ -Severity Error,Warning -ExcludeRule PSAvoidUsingWriteHost,PSUseShouldProcessForStateChangingFunctions }
+          $r | Format-Table; if ($r) { exit 1 }
+      - shell: pwsh
+        run: |
+          $env:LILYPAD_CONFIG_DIR = Join-Path $env:RUNNER_TEMP 'cfg'
+          ./bin/lilypad.ps1 login lpk_test
+          ./bin/lilypad.ps1 config url https://example.invalid/x
+          if ((Get-Content "$env:LILYPAD_CONFIG_DIR/url") -ne 'https://example.invalid/x') { exit 1 }

@@ -1,0 +1,49 @@
+LILYPAD CLI PROPRIETARY LICENSE
+
+Copyright (c) 2026 Leapfrog Technology, Inc. All rights reserved.
+
+This software, including its source code, scripts, documentation and any
+associated skill files (the "Software"), is the confidential and proprietary
+property of Leapfrog Technology, Inc. ("Leapfrog"). It is made publicly
+visible for transparency and so that authorized users can install and run it.
+It is NOT open source software, and no open source license applies to it.
+
+1. Limited grant. Leapfrog grants you a non-exclusive, non-transferable,
+   non-sublicensable, revocable license to download, install and run unmodified
+   copies of the Software solely to access and use the Lilypad platform
+   operated by or for Leapfrog, and only if you are authorized by Leapfrog to
+   use that platform.
+
+2. Restrictions. Except as expressly permitted in section 1 or by applicable
+   law that cannot be waived by contract, you may not:
+   a. copy, reproduce or redistribute the Software, in whole or in part, in
+      source or binary form;
+   b. modify, adapt, translate or create derivative works of the Software;
+   c. fork, mirror or republish the Software or any part of it;
+   d. sublicense, sell, rent, lease or otherwise commercialize the Software;
+   e. reverse engineer the Software or the Lilypad platform, or use the
+      Software or its interfaces to build, train or operate a competing,
+      compatible or substitute product, client or service;
+   f. remove or alter any copyright, license or proprietary notice.
+
+3. Ownership. The Software is licensed, not sold. Leapfrog retains all right,
+   title and interest, including all intellectual property rights. All rights
+   not expressly granted are reserved.
+
+4. Feedback. Any suggestions you submit about the Software may be used by
+   Leapfrog without restriction or obligation to you.
+
+5. Termination. This license terminates automatically if you breach it, and
+   Leapfrog may revoke it at any time. On termination you must stop using the
+   Software and delete all copies.
+
+6. No warranty. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+   EXPRESS OR IMPLIED, INCLUDING THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR
+   A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
+
+7. Limitation of liability. TO THE MAXIMUM EXTENT PERMITTED BY LAW, LEAPFROG
+   SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL OR
+   PUNITIVE DAMAGES, OR ANY LOSS OF DATA OR PROFITS, ARISING OUT OF OR RELATED
+   TO THE SOFTWARE OR THIS LICENSE.
+
+For other licensing inquiries, contact Leapfrog Technology, Inc.
