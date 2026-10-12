@@ -7,7 +7,7 @@
 #   lilypad update                            reinstall the latest version
 #   lilypad --how-to                          step-by-step guide: deploy a demo, use the tool
 #   lilypad logout                            delete the saved key
-#   lilypad whoami                            your email and key expiry
+#   lilypad whoami                            your email, key expiry, admin or not
 #   lilypad list [--client C]                 active demos, optionally one client's
 #   lilypad setup [<name>] [--conf FILE] [--repo <url>] [--client C] [--branch B] [--port N]
 #                  [--health /path] [--size tiny|small|medium|large] [--env-file FILE]
@@ -43,7 +43,7 @@ Demos are deleted after 30 days.
 2. Get an access key (your company email is your identity)
       lilypad auth you@lftechnology.com    # exact address, no + aliases
       lilypad login lpk_...                # paste the key from the email (check spam/junk too)
-      lilypad whoami                       # shows your email and key expiry
+      lilypad whoami                       # shows your email, key expiry, admin or not
 
 3. Prepare the repo
    - Dockerfile at the repo root (the branch you deploy).
@@ -236,7 +236,7 @@ EOT
     whoami) cat <<'EOT'
 lilypad whoami
 
-Show the email your key belongs to and when the key expires. No options.
+Show the email your key belongs to, when the key expires, and whether you are an admin. No options.
 EOT
       ;;
     list) cat <<'EOT'

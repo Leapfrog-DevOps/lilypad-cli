@@ -173,6 +173,10 @@
   const apiUrl = () => store.get(K.url) || S.cfg.apiUrl;
   const hasKey = () => !!store.get(K.key);
   const myEmail = () => (S.me && S.me.email ? S.me.email.toLowerCase() : "");
+  const isAdmin = () => !!(S.me && S.me.admin);
+  // Creator-only actions (deploy, redeploy, edit) are hidden on other people's demos. Unknown owner counts as mine.
+  const isMine = (d) => !d.owner || !myEmail() || d.owner.toLowerCase() === myEmail();
+  const adminTag = () => (isAdmin() ? h("span", { class: "tag admin", text: "Admin" }) : null);
 
   function demoDomain() {
     if (S.cfg.demoDomain) return S.cfg.demoDomain;
@@ -482,7 +486,8 @@
   function topbar() {
     const email = myEmail();
     const userBtn = h("button", { class: "userbtn", type: "button", "aria-haspopup": "menu", "aria-expanded": "false", id: "userbtn" },
-      h("span", { class: "avatar", text: initials(email || "?") }), h("span", { class: "email", text: email || "Account" }));
+      h("span", { class: "avatar", text: initials(email || "?") }), h("span", { class: "email", text: email || "Account" }),
+      h("span", { class: "tag admin", id: "admin-badge", text: "Admin", hidden: !isAdmin() }));
     userBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       const exp = S.me && S.me.keyExpiresAt;
@@ -493,6 +498,7 @@
         "-",
         { icon: "i-logout", label: "Sign out", danger: true, run: signOut },
       ], { head: h("div", { class: "menu-head" }, h("span", { class: "eyebrow", text: "Signed in as" }), h("strong", { text: myEmail() || "unknown" }),
+        isAdmin() ? h("span", { class: "hint", text: "Admin: you can see, extend and destroy every demo." }) : null,
         exp ? h("span", { class: "hint", text: "Key expires " + fmtRel(exp) + " (" + fmtDate(exp) + ")" }) : null) });
     });
     return h("header", { class: "topbar" }, h("div", { class: "topbar-in" },
@@ -510,7 +516,7 @@
       if (a.getAttribute("data-nav") === active) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
     });
     const ub = $("#userbtn");
-    if (ub && S.me) { $(".avatar", ub).textContent = initials(S.me.email); $(".email", ub).textContent = S.me.email; }
+    if (ub && S.me) { $(".avatar", ub).textContent = initials(S.me.email); $(".email", ub).textContent = S.me.email; $("#admin-badge").hidden = !isAdmin(); }
   }
   function renderGlobalAlert() {
     const root = $("#global-alert");
@@ -536,9 +542,10 @@
   async function whoami() {
     if (!apiUrl() || !hasKey()) return null;
     const r = await api({ action: "whoami" });
-    if (r.ok && r.data && r.data.email) { S.me = { email: r.data.email, keyExpiresAt: r.data.keyExpiresAt || "" }; S.authBad = false; }
+    if (r.ok && r.data && r.data.email) { S.me = { email: r.data.email, keyExpiresAt: r.data.keyExpiresAt || "", admin: r.data.admin === true }; S.authBad = false; }
     renderGlobalAlert();
     updateNav(route());
+    updateDemos();
     return r;
   }
   async function signOut() {
@@ -684,7 +691,7 @@
         onbGo("key", r.code === 401 ? "That key isn't valid. It may have been replaced by a newer one; use the latest email." : errText(r));
         return;
       }
-      S.me = { email: r.data.email, keyExpiresAt: r.data.keyExpiresAt || "" };
+      S.me = { email: r.data.email, keyExpiresAt: r.data.keyExpiresAt || "", admin: r.data.admin === true };
       onbGo("done");
     };
     verify.addEventListener("click", submit);
@@ -710,7 +717,7 @@
       h("h2", { text: "You're all set" }),
       h("p", { class: "lead", text: "Lilypad is connected. Your demos will show up on the dashboard." }),
       S.me ? h("div", { class: "id-card" }, h("span", { class: "avatar", text: initials(S.me.email) }),
-        h("div", null, h("strong", { text: S.me.email }), h("div", { class: "hint", text: exp ? "Key valid until " + fmtDate(exp) : "Key verified" }))) : null,
+        h("div", null, h("strong", { text: S.me.email }), " ", adminTag(), h("div", { class: "hint", text: exp ? "Key valid until " + fmtDate(exp) : "Key verified" }))) : null,
       h("div", { class: "onb-actions" },
         btn("Create your first demo", { cls: "btn-primary btn-lg", icon: "i-rocket", onclick: () => finish("new") }),
         btn("Go to dashboard", { cls: "btn-lg", onclick: () => finish("demos") })),
@@ -742,7 +749,7 @@
 
     add(main, [
       h("div", { class: "page-head" },
-        h("div", { class: "grow" }, h("h1", { text: "Demos" }), h("p", { class: "sub", text: "Live, disposable demos built from your GitHub repos." })),
+        h("div", { class: "grow" }, h("h1", { id: "demos-title", text: "Demos" }), h("p", { class: "sub", id: "demos-sub", text: "Live, disposable demos built from your GitHub repos." })),
         btn("New demo", { cls: "btn-primary btn-lg", icon: "i-plus", href: "#/new" })),
       h("div", { class: "stats", id: "stats" }),
       h("div", { class: "toolbar" },
@@ -773,6 +780,8 @@
   function updateDemos() {
     const grid = $("#grid");
     if (!grid) return;
+    $("#demos-title").textContent = isAdmin() ? "All demos" : "Demos";
+    $("#demos-sub").textContent = isAdmin() ? "You're an admin, so you see everyone's demos." : "Live, disposable demos built from your GitHub repos.";
     const all = Array.from(S.demos.values());
     const me = myEmail();
     const live = all.filter((d) => category(d) === "live").length;
@@ -869,7 +878,7 @@
 
     let primary = null;
     if (d.status === "RUNNING" && url) primary = btn("Open", { cls: "btn-sm", icon: "i-external", href: url, external: true });
-    else if (d.status === "CONFIGURED" || d.status === "FAILED") {
+    else if ((d.status === "CONFIGURED" || d.status === "FAILED") && isMine(d)) {
       primary = btn(d.status === "FAILED" ? "Retry deploy" : "Deploy", { cls: "btn-sm btn-primary", icon: "i-rocket" });
       primary.addEventListener("click", (e) => { e.stopPropagation(); runAction("create", d.name, primary); });
     }
@@ -899,10 +908,10 @@
     return [
       { icon: "i-info", label: "View details", run: () => go("demo/" + n) },
       { icon: "i-terminal", label: "Logs", run: () => go("demo/" + n + "?tab=logs") },
-      s === "CONFIGURED" || s === "FAILED" ? { icon: "i-rocket", label: "Deploy", run: () => runAction("create", d.name) } : null,
-      s === "RUNNING" ? { icon: "i-redo", label: "Redeploy latest commit", run: () => runAction("redeploy", d.name) } : null,
+      (s === "CONFIGURED" || s === "FAILED") && isMine(d) ? { icon: "i-rocket", label: "Deploy", run: () => runAction("create", d.name) } : null,
+      s === "RUNNING" && isMine(d) ? { icon: "i-redo", label: "Redeploy latest commit", run: () => runAction("redeploy", d.name) } : null,
       s === "RUNNING" ? { icon: "i-calendar", label: "Extend 30 days", run: () => runAction("extend", d.name) } : null,
-      s !== "DESTROYING" ? { icon: "i-edit", label: "Edit settings", run: () => go("edit/" + n) } : null,
+      s !== "DESTROYING" && isMine(d) ? { icon: "i-edit", label: "Edit settings", run: () => go("edit/" + n) } : null,
       "-",
       { icon: "i-trash", label: "Destroy", danger: true, run: () => runAction("destroy", d.name) },
     ];
@@ -993,10 +1002,11 @@
     if (!missing && D.r) {
       const s = d.status;
       if (s === "RUNNING" && url) acts.append(btn("Open demo", { cls: "btn-primary", icon: "i-external", href: url, external: true }));
-      if (s === "CONFIGURED" || s === "FAILED") { const b = btn(s === "FAILED" ? "Retry deploy" : "Deploy", { cls: "btn-primary", icon: "i-rocket" }); b.addEventListener("click", () => runAction("create", D.name, b)); acts.append(b); }
-      if (s === "RUNNING") { const b = btn("Redeploy", { icon: "i-redo" }); b.addEventListener("click", () => runAction("redeploy", D.name, b)); acts.append(b); }
+      const mine = isMine(d);
+      if ((s === "CONFIGURED" || s === "FAILED") && mine) { const b = btn(s === "FAILED" ? "Retry deploy" : "Deploy", { cls: "btn-primary", icon: "i-rocket" }); b.addEventListener("click", () => runAction("create", D.name, b)); acts.append(b); }
+      if (s === "RUNNING" && mine) { const b = btn("Redeploy", { icon: "i-redo" }); b.addEventListener("click", () => runAction("redeploy", D.name, b)); acts.append(b); }
       if (s === "RUNNING") { const b = btn("Extend 30 days", { icon: "i-calendar" }); b.addEventListener("click", () => runAction("extend", D.name, b)); acts.append(b); }
-      if (s !== "DESTROYING") acts.append(btn("Edit settings", { icon: "i-edit", href: "#/edit/" + encodeURIComponent(D.name) }));
+      if (s !== "DESTROYING" && mine) acts.append(btn("Edit settings", { icon: "i-edit", href: "#/edit/" + encodeURIComponent(D.name) }));
       const rb = btn("", { cls: "btn-ghost btn-icon", icon: "i-refresh", aria: "Refresh", title: "Refresh" });
       rb.addEventListener("click", async () => { rb.querySelector("svg").classList.add("spin"); await loadDrawer(); if (S.drawer && S.drawer.tab === "logs") loadLogs(); });
       acts.append(rb);
@@ -1099,8 +1109,10 @@
         ["Client", d.client || "None"],
         ["Env variables", env.length ? h("span", { class: "row" }, env.map((k) => h("span", { class: "tag", text: k }))) : "None"],
       ]),
-      h("div", { class: "row mt-16" }, btn("Edit settings", { cls: "btn-primary", icon: "i-edit", href: "#/edit/" + encodeURIComponent(D.name) }),
-        h("span", { class: "hint", text: "Saving replaces the whole config. Redeploy afterwards to apply it." })),
+      isMine({ owner: d.ownerEmail })
+        ? h("div", { class: "row mt-16" }, btn("Edit settings", { cls: "btn-primary", icon: "i-edit", href: "#/edit/" + encodeURIComponent(D.name) }),
+          h("span", { class: "hint", text: "Saving replaces the whole config. Redeploy afterwards to apply it." }))
+        : h("p", { class: "hint mt-16", text: "Only " + d.ownerEmail + " can change these settings or redeploy." }),
       h("div", { class: "danger-zone" }, h("h3", { text: "Danger zone" }),
         h("p", { text: "Destroying deletes the service and images for good. The name becomes free for anyone." }), destroy),
     ]);
@@ -1365,8 +1377,9 @@
     const health = inp("health", d.health, { placeholder: "/" });
     const grid = h("div", { class: "choice-grid", role: "radiogroup", "aria-label": "Size" });
     for (const s of SIZES) {
-      const radio = h("input", { type: "radio", name: "size", value: s.id, checked: d.size === s.id });
-      const lab = h("label", { class: "choice" + (d.size === s.id ? " on" : "") }, radio,
+      const locked = s.admin && !isAdmin();
+      const radio = h("input", { type: "radio", name: "size", value: s.id, checked: d.size === s.id, disabled: locked });
+      const lab = h("label", { class: "choice" + (d.size === s.id ? " on" : "") + (locked ? " disabled" : ""), title: locked ? "Only admins can pick large" : null }, radio,
         h("span", { class: "c-t" }, s.id, s.def ? h("span", { class: "tag", text: "default" }) : null, s.admin ? h("span", { class: "c-badge", text: "admin" }) : null),
         h("span", { class: "c-d", text: s.spec }), h("span", { class: "c-d", text: s.d }));
       radio.addEventListener("change", () => { d.size = s.id; grid.querySelectorAll(".choice").forEach((c) => c.classList.remove("on")); lab.classList.add("on"); });
@@ -1657,8 +1670,9 @@
         h("div", { class: "card" },
           setRow("Account", "You sign in with an emailed key. Nothing else about you is stored here.",
             S.me ? h("div", { class: "id-card" }, h("span", { class: "avatar", text: initials(S.me.email) }),
-              h("div", null, h("strong", { text: S.me.email }), h("div", { class: "hint", text: exp ? "Key expires " + fmtDate(exp) + " (" + fmtRel(exp) + ")" : "Key verified" })))
+              h("div", null, h("strong", { text: S.me.email }), " ", adminTag(), h("div", { class: "hint", text: exp ? "Key expires " + fmtDate(exp) + " (" + fmtRel(exp) + ")" : "Key verified" })))
               : h("p", { class: "hint", text: "Key not verified yet." }),
+            isAdmin() ? h("p", { class: "hint", text: "As an admin you see every demo, and can view logs, extend and destroy any of them. Deploying and editing stay with each demo's creator." }) : null,
             h("div", { class: "row" }, btn("Get a new key", { icon: "i-key", href: "#/welcome?step=email" }), btn("Sign out", { cls: "btn-danger", icon: "i-logout", onclick: signOut }))),
           setRow("Platform URL", S.cfg.apiUrl ? "Provided by this site. Change it only if your admin asks you to." : "From your Lilypad admin.",
             h("div", { class: "row" }, h("div", { class: "grow" }, url), saveUrl))),

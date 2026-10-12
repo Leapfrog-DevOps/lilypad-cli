@@ -38,7 +38,7 @@ Demos are deleted after 30 days.
 2. Get an access key (your company email is your identity)
       lilypad auth you@lftechnology.com    # exact address, no + aliases
       lilypad login lpk_...                # paste the key from the email (check spam/junk too)
-      lilypad whoami                       # shows your email and key expiry
+      lilypad whoami                       # shows your email, key expiry, admin or not
 
 3. Prepare the repo
    - Dockerfile at the repo root (the branch you deploy).
