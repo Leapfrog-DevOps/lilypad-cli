@@ -18,7 +18,7 @@ Windows (PowerShell, no Git Bash or WSL needed):
 irm https://raw.githubusercontent.com/Leapfrog-DevOps/lilypad-cli/main/install.ps1 | iex
 ```
 
-Pin a release instead of `main`: `LILYPAD_VERSION=v1.0.0` before the command (`$env:LILYPAD_VERSION='v1.0.0'` in PowerShell).
+Pin a release instead of `main`: `LILYPAD_VERSION=v1.0.1` before the command (`$env:LILYPAD_VERSION='v1.0.1'` in PowerShell).
 
 Running `./install.sh` (or `.\install.ps1`) from a clone installs the local files; nothing is downloaded.
 

@@ -8,7 +8,7 @@
 #   lilypad config url <URL> | update | '<json>' | - | --how-to
 # Key: $env:LILYPAD_KEY, else %APPDATA%\lilypad\key. URL: $env:LILYPAD_URL, else %APPDATA%\lilypad\url.
 $ErrorActionPreference = 'Stop'
-$Version = '1.0.0'
+$Version = '1.0.1'
 
 function Die([string]$msg) { [Console]::Error.WriteLine("lilypad: $msg"); exit 1 }
 function Usage {

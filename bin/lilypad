@@ -21,7 +21,7 @@
 # Key: $LILYPAD_KEY, else ~/.config/lilypad/key. URL: $LILYPAD_URL, else ~/.config/lilypad/url.
 set -euo pipefail
 
-VERSION="1.0.0"
+VERSION="1.0.1"
 
 usage() {
   sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' >&2
