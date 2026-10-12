@@ -936,7 +936,7 @@
         h("div", { class: "drawer-head", id: "drawer-head" }),
         h("div", { class: "drawer-body", id: "drawer-body" })));
     document.body.style.overflow = "hidden";
-    S.drawer = { name, tab, r: null, timer: null, logTimer: null, logLines: 100, tail: false, logs: [] };
+    S.drawer = { name, tab, r: null, timer: null, logTimer: null, logLines: 100, tail: false, logs: [], all: [], mark: null, clearedAt: null };
     refreshDrawerHead();
     renderDrawerBody();
     const c = $("#drawer-close");
@@ -1128,6 +1128,7 @@
       h("div", { class: "term-bar" }, lines,
         h("label", { class: "switch" }, tail, "Live tail"),
         h("span", { class: "grow" }),
+        btn("Clear", { cls: "btn-sm btn-ghost", icon: "i-x", onclick: clearLogs }),
         btn("Copy", { cls: "btn-sm btn-ghost", icon: "i-copy", onclick: () => copy((D.logs || []).join("\n"), "Logs copied") }),
         btn("Download", { cls: "btn-sm btn-ghost", icon: "i-download", onclick: downloadLogs }),
         btn("Reload", { cls: "btn-sm", icon: "i-refresh", onclick: () => loadLogs() })),
@@ -1148,12 +1149,56 @@
     const r = await api({ action: "logs", name: D.name, args: { lines: String(D.logLines) } });
     const term = $("#term");
     if (S.drawer !== D || D.tab !== "logs" || !term) return;
+    if (!r.ok) { clear(term); term.append(h("span", { class: "err", text: errText(r) })); return; }
+    D.all = r.data && Array.isArray(r.data.lines) ? r.data.lines : [];
+    renderLogLines(quiet);
+  }
+  // The platform only returns the last N lines, so Clear can't drop anything server side. It keeps the last
+  // few lines on screen as a marker and from then on shows only what follows the marker's last occurrence.
+  // If the marker has scrolled out of the returned window, every line is new.
+  const MARK_LEN = 5;
+  function afterMark(arr, mark) {
+    if (!mark) return arr;
+    for (let end = arr.length; end >= mark.length; end--) {
+      let hit = true;
+      for (let k = 0; k < mark.length && hit; k++) hit = arr[end - mark.length + k] === mark[k];
+      if (hit) return arr.slice(end);
+    }
+    return arr;
+  }
+  function clearLogs() {
+    const D = S.drawer;
+    if (!D) return;
+    D.mark = D.all.length ? D.all.slice(-MARK_LEN) : null;
+    D.clearedAt = new Date();
+    renderLogLines();
+  }
+  function showAllLogs() {
+    const D = S.drawer;
+    if (!D) return;
+    D.mark = null;
+    D.clearedAt = null;
+    renderLogLines();
+  }
+  function renderLogLines(quiet) {
+    const D = S.drawer;
+    const term = $("#term");
+    if (!D || !term) return;
     const atBottom = term.scrollHeight - term.scrollTop - term.clientHeight < 40;
     clear(term);
-    if (!r.ok) { term.append(h("span", { class: "err", text: errText(r) })); return; }
-    const arr = r.data && Array.isArray(r.data.lines) ? r.data.lines : [];
+    const arr = afterMark(D.all, D.mark);
     D.logs = arr;
-    if (!arr.length) { term.append(h("span", { class: "dim", text: "No logs yet. They appear once the container starts." })); return; }
+    if (D.clearedAt) {
+      const all = h("button", { type: "button", class: "term-link", text: "Show all" });
+      all.addEventListener("click", showAllLogs);
+      term.append(h("span", { class: "ln dim" }, "── Cleared at " + D.clearedAt.toLocaleTimeString() + ". Older lines hidden. ", all));
+    }
+    if (!arr.length) {
+      const msg = !D.clearedAt ? "No logs yet. They appear once the container starts."
+        : D.tail ? "Waiting for new lines…" : "No new lines yet. Turn on Live tail or Reload.";
+      term.append(h("span", { class: "dim", text: msg }));
+      return;
+    }
     for (const l of arr) {
       const cls = /\b(error|exception|fatal|traceback|panic|failed)\b/i.test(l) ? "ln err" : /\bwarn(ing)?\b/i.test(l) ? "ln wrn" : "ln";
       term.append(h("span", { class: cls, text: l }));
