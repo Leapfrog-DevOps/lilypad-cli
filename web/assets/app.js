@@ -460,7 +460,8 @@
     const parts = path.split("/").filter(Boolean).map((p) => { try { return decodeURIComponent(p); } catch (e) { return p; } });
     return { view: parts[0] || "demos", arg: parts[1] || "", q: new URLSearchParams(qi < 0 ? "" : raw.slice(qi + 1)) };
   }
-  function go(path) { location.hash = "#/" + path; }
+  // Setting the hash it already has fires no hashchange (onboarding runs under #/demos), so render directly.
+  function go(path) { const want = "#/" + path; if (location.hash === want) render(); else location.hash = want; }
   window.addEventListener("hashchange", render);
 
   function render() {
