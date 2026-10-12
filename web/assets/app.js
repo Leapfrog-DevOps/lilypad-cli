@@ -324,7 +324,7 @@
   function rowFromStatus(d) {
     return {
       name: d.name, client: d.client || "", status: d.status, owner: d.ownerEmail || "", url: d.url || "",
-      expiresAt: d.expiresAt || "", settled: d.settled, stage: d.stage || "", full: d,
+      expiresAt: d.expiresAt || "", permanent: !!d.permanent, settled: d.settled, stage: d.stage || "", full: d,
     };
   }
   function category(d) {
@@ -351,7 +351,7 @@
       const keep = prev && prev.status === row.status;
       next.set(row.name, {
         name: row.name, client: row.client || "", status: row.status, owner: row.owner || "", url: row.url || "", expiresAt: row.expiresAt || "",
-        settled: keep ? prev.settled : undefined, stage: keep ? prev.stage : "", full: keep ? prev.full : null,
+        permanent: !!row.permanent, settled: keep ? prev.settled : undefined, stage: keep ? prev.stage : "", full: keep ? prev.full : null,
       });
     }
     for (const n of tracked()) if (!next.has(n)) next.set(n, S.demos.get(n) || { name: n, status: "UNKNOWN" });
@@ -417,6 +417,8 @@
     create: (n) => "Deploying " + n + ". Usually 5–10 minutes; you'll get an email when it's live.",
     redeploy: (n) => "Redeploying " + n + " from the latest commit. The current version keeps serving until the new one is healthy.",
     destroy: (n) => "Removing " + n + ". It'll be gone in a minute or two.",
+    pin: (n) => "Making " + n + " permanent. Its expiry goes away in a minute or so.",
+    unpin: (n) => n + " is going back to a 30-day lifetime.",
   };
   async function runAction(action, name, b) {
     if (action === "destroy") {
@@ -424,6 +426,14 @@
         title: "Destroy " + name + "?", danger: true, confirm: "Destroy demo", requireText: name, icon: "i-trash",
         body: "This deletes the demo, its service and its images. It cannot be undone, and the name becomes free for anyone.",
       });
+      if (!yes) return null;
+    }
+    if (action === "pin" || action === "unpin") {
+      const yes = await modal(action === "pin"
+        ? { title: "Make " + name + " permanent?", confirm: "Make permanent", icon: "i-pin",
+            body: "It will never expire and nobody, admins included, can destroy it until an admin unpins it. It won't count toward its creator's demo limit." }
+        : { title: "Unpin " + name + "?", confirm: "Unpin", icon: "i-pin",
+            body: "It goes back to a normal 30-day lifetime from today, with the usual warning email, and can be destroyed again." });
       if (!yes) return null;
     }
     busyBtn(b, true);
@@ -786,8 +796,8 @@
     const me = myEmail();
     const live = all.filter((d) => category(d) === "live").length;
     const busy = all.filter((d) => category(d) === "busy").length;
-    const soon = all.filter((d) => { const n = daysLeft(d.expiresAt); return d.status === "RUNNING" && n !== null && n <= 7; }).length;
-    const mine = all.filter((d) => ACTIVE.has(d.status) && (!me || (d.owner || "").toLowerCase() === me)).length;
+    const soon = all.filter((d) => { const n = daysLeft(d.expiresAt); return d.status === "RUNNING" && !d.permanent && n !== null && n <= 7; }).length;
+    const mine = all.filter((d) => ACTIVE.has(d.status) && !d.permanent && (!me || (d.owner || "").toLowerCase() === me)).length;
     const stats = clear($("#stats"));
     const stat = (cls, ic, num, label, extra) => h("div", { class: "card stat" }, h("div", { class: "stat-ico " + cls }, icon(ic)),
       h("div", null, h("div", { class: "stat-num", text: S.loaded ? num : "–" }), h("div", { class: "stat-label", text: label }), extra || null));
@@ -857,6 +867,7 @@
     return s ? s.charAt(0).toUpperCase() + s.slice(1) + "…" : "";
   }
   function expiryBlock(d) {
+    if (d.permanent) return h("div", { class: "expiry" }, h("div", { class: "expiry-row" }, h("span", null, "Permanent"), h("span", { text: "Never expires" })));
     const n = daysLeft(d.expiresAt);
     if (n === null) return null;
     const pct = Math.max(2, Math.min(100, (n / TTL_DAYS) * 100));
@@ -871,6 +882,7 @@
     const me = myEmail();
     const sub = [];
     if (d.client) sub.push(h("span", { class: "tag client", text: d.client }));
+    if (d.permanent) sub.push(h("span", { class: "tag permanent", title: "Pinned by an admin: never expires, can't be destroyed", text: "Permanent" }));
     if (d.owner) sub.push(h("span", { text: d.owner.toLowerCase() === me ? "You" : d.owner }));
 
     const kebab = h("button", { class: "iconbtn", type: "button", "aria-label": "More actions for " + d.name, "aria-haspopup": "menu", "aria-expanded": "false" }, icon("i-more"));
@@ -910,10 +922,11 @@
       { icon: "i-terminal", label: "Logs", run: () => go("demo/" + n + "?tab=logs") },
       (s === "CONFIGURED" || s === "FAILED") && isMine(d) ? { icon: "i-rocket", label: "Deploy", run: () => runAction("create", d.name) } : null,
       s === "RUNNING" && isMine(d) ? { icon: "i-redo", label: "Redeploy latest commit", run: () => runAction("redeploy", d.name) } : null,
-      s === "RUNNING" ? { icon: "i-calendar", label: "Extend 30 days", run: () => runAction("extend", d.name) } : null,
+      s === "RUNNING" && !d.permanent ? { icon: "i-calendar", label: "Extend 30 days", run: () => runAction("extend", d.name) } : null,
       s !== "DESTROYING" && isMine(d) ? { icon: "i-edit", label: "Edit settings", run: () => go("edit/" + n) } : null,
-      "-",
-      { icon: "i-trash", label: "Destroy", danger: true, run: () => runAction("destroy", d.name) },
+      s === "RUNNING" && isAdmin() ? { icon: "i-pin", label: d.permanent ? "Unpin (back to 30 days)" : "Make permanent", run: () => runAction(d.permanent ? "unpin" : "pin", d.name) } : null,
+      d.permanent ? null : "-",
+      d.permanent ? null : { icon: "i-trash", label: "Destroy", danger: true, run: () => runAction("destroy", d.name) },
     ];
   }
 
@@ -1005,7 +1018,8 @@
       const mine = isMine(d);
       if ((s === "CONFIGURED" || s === "FAILED") && mine) { const b = btn(s === "FAILED" ? "Retry deploy" : "Deploy", { cls: "btn-primary", icon: "i-rocket" }); b.addEventListener("click", () => runAction("create", D.name, b)); acts.append(b); }
       if (s === "RUNNING" && mine) { const b = btn("Redeploy", { icon: "i-redo" }); b.addEventListener("click", () => runAction("redeploy", D.name, b)); acts.append(b); }
-      if (s === "RUNNING") { const b = btn("Extend 30 days", { icon: "i-calendar" }); b.addEventListener("click", () => runAction("extend", D.name, b)); acts.append(b); }
+      if (s === "RUNNING" && !d.permanent) { const b = btn("Extend 30 days", { icon: "i-calendar" }); b.addEventListener("click", () => runAction("extend", D.name, b)); acts.append(b); }
+      if (s === "RUNNING" && isAdmin()) { const b = btn(d.permanent ? "Unpin" : "Make permanent", { icon: "i-pin" }); b.addEventListener("click", () => runAction(d.permanent ? "unpin" : "pin", D.name, b)); acts.append(b); }
       if (s !== "DESTROYING" && mine) acts.append(btn("Edit settings", { icon: "i-edit", href: "#/edit/" + encodeURIComponent(D.name) }));
       const rb = btn("", { cls: "btn-ghost btn-icon", icon: "i-refresh", aria: "Refresh", title: "Refresh" });
       rb.addEventListener("click", async () => { rb.querySelector("svg").classList.add("spin"); await loadDrawer(); if (S.drawer && S.drawer.tab === "logs") loadLogs(); });
@@ -1077,7 +1091,7 @@
       ["Status", h("span", { class: "pill " + cat, text: statusLabel(row) })],
       ["Stage", d.stage ? d.stage.charAt(0).toUpperCase() + d.stage.slice(1) : ""],
       ["Health", health],
-      ["Expires", d.expiresAt ? fmtDate(d.expiresAt) + " · " + (n > 0 ? "in " + n + (n === 1 ? " day" : " days") : "today") + (d.extensions ? " · extended " + d.extensions + "×" : "") : ""],
+      ["Expires", d.permanent ? "Never (permanent)" : d.expiresAt ? fmtDate(d.expiresAt) + " · " + (n > 0 ? "in " + n + (n === 1 ? " day" : " days") : "today") + (d.extensions ? " · extended " + d.extensions + "×" : "") : ""],
       ["Owner", d.ownerEmail],
       ["Client", d.client],
       ["Commit", d.commitSha ? h("code", { text: d.commitSha.slice(0, 12) }) : ""],
@@ -1113,8 +1127,10 @@
         ? h("div", { class: "row mt-16" }, btn("Edit settings", { cls: "btn-primary", icon: "i-edit", href: "#/edit/" + encodeURIComponent(D.name) }),
           h("span", { class: "hint", text: "Saving replaces the whole config. Redeploy afterwards to apply it." }))
         : h("p", { class: "hint mt-16", text: "Only " + d.ownerEmail + " can change these settings or redeploy." }),
-      h("div", { class: "danger-zone" }, h("h3", { text: "Danger zone" }),
-        h("p", { text: "Destroying deletes the service and images for good. The name becomes free for anyone." }), destroy),
+      d.permanent
+        ? h("p", { class: "hint mt-16", text: "This demo is permanent, so it can't be destroyed. An admin has to unpin it first." })
+        : h("div", { class: "danger-zone" }, h("h3", { text: "Danger zone" }),
+          h("p", { text: "Destroying deletes the service and images for good. The name becomes free for anyone." }), destroy),
     ]);
   }
 
@@ -1645,7 +1661,7 @@
       ["How long does a demo live?", "30 days. You get a warning email on day 27. Extend moves the expiry to 30 days from now, up to 90 days in total."],
       ["Can I change settings after deploying?", "Yes: Edit settings, save, then Redeploy. The client part of the address is fixed after the first deploy; destroy and set up again to change it."],
       ["Can I put secrets in environment variables?", "No. Platform operators can read them. Use test credentials only."],
-      ["How many demos can I run?", "Three active demos per person. Destroy one to free a slot."],
+      ["How many demos can I run?", "Five active demos per person (25 for admins). Destroy one to free a slot. Demos an admin made permanent don't count."],
       ["Who can open or manage my demo?", "Anyone with the link can open the app itself, so add your own login if it needs one. Only you and Lilypad admins can see its status and logs, extend it or destroy it."],
       ["Where is my key kept?", "In this browser's local storage. Sign out removes it. Requesting a new key replaces the old one everywhere."],
       ["Keyboard shortcuts?", "/ search · n new demo · r refresh · ? help · Esc closes panels and menus."],

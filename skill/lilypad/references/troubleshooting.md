@@ -17,6 +17,6 @@
 | status: Dockerfile missing | Repo root (branch built) needs a `Dockerfile`. Push it, rerun `setup`, then `create`. |
 | Demo RUNNING but 5xx / unhealthy | Check `--port` matches container port and `--health` returns 200-399 without login. `lilypad logs <name> 200`. |
 | Env vars vanished after edit | `setup` replaces whole config; rerun with `--env-file` again. |
-| 4th demo refused | Cap is 3 active demos per person. Destroy one. |
+| 6th demo refused | Cap is 5 active demos per person (25 for admins). Destroy one. |
 
 Debug order for a failed deploy: `lilypad status <name> | jq -r .message`, then `jq .data`, then `lilypad logs <name> 200`, fix repo or config, `setup` (all options), `redeploy`.

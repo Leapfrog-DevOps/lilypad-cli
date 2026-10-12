@@ -15,16 +15,17 @@
 #   lilypad setup --sample                    print a sample conf file: lilypad setup --sample > demoproject.conf
 #   lilypad create|redeploy|status|extend|destroy <name>   (deploy = create)
 #   lilypad logs <name> [lines]               default 50, max 500
+#   lilypad pin|unpin <name>                  admins: make permanent (no expiry, not destroyable), or undo
 #   lilypad '<json>' | lilypad -            raw JSON body (JSON as an argument, or on stdin)
 #   lilypad <command> --help                  what a command does and the options it takes
 #
 # Key: $LILYPAD_KEY, else ~/.config/lilypad/key. URL: $LILYPAD_URL, else ~/.config/lilypad/url.
 set -euo pipefail
 
-VERSION="1.0.1"
+VERSION="1.0.2"
 
 usage() {
-  sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' >&2
+  sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//' >&2
   exit 2
 }
 
@@ -90,7 +91,7 @@ Demos are deleted after 30 days.
       lilypad list                 # your demos, any status but destroyed
       lilypad extend acme-poc      # expiry = now + 30 days (90 days total at most)
       lilypad destroy acme-poc     # permanent; the name is free for anyone afterwards
-   A warning email arrives on day 27. At most 3 active demos per person.
+   A warning email arrives on day 27. At most 5 active demos per person (25 for admins).
 
 More: lilypad --help, lilypad <command> --help.
 EOT
@@ -300,8 +301,8 @@ only says "accepted". You get one email when it is live, or one if it fails.
 
   <name>    the demo name used in setup
 
-Usually takes 5 to 10 minutes. Poll with `lilypad status <name>`. Creator only. Up to 3 active
-demos per person.
+Usually takes 5 to 10 minutes. Poll with `lilypad status <name>`. Creator only. Up to 5 active
+demos per person (25 for admins).
 EOT
       ;;
     redeploy) cat <<'EOT'
@@ -336,6 +337,17 @@ EOT
 lilypad extend <name>
 
 Move the expiry to 30 days from now. Total lifetime is capped at 90 days. Creator or admin.
+
+  <name>    the demo name
+EOT
+      ;;
+    pin | unpin) cat <<'EOT'
+lilypad pin <name>
+lilypad unpin <name>
+
+Admins only. pin makes a running demo permanent: no expiry, no warning email, and nobody can
+destroy it until it is unpinned. It does not count toward its creator's cap, and redeploy keeps it
+permanent. unpin puts it back on a normal 30-day lifetime. Asynchronous; check with status.
 
   <name>    the demo name
 EOT
@@ -464,7 +476,7 @@ case "$action" in
     need_jq
     body="$(jq -nc --arg c "$client" '{action: "list"} + (if $c == "" then {} else {args: {client: $c}} end)')"
     ;;
-  create | redeploy | status | extend | destroy)
+  create | redeploy | status | extend | destroy | pin | unpin)
     [ $# -eq 1 ] || usage
     need_jq
     body="$(jq -nc --arg a "$action" --arg n "$1" '{action: $a, name: $n}')"

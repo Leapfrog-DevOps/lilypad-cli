@@ -4,11 +4,11 @@
 #   lilypad list [--client C]
 #   lilypad setup [<name>] [--conf FILE] [--repo <url>] [--client C] [--branch B] [--port N] [--health /p] [--size S] [--env-file F]
 #   lilypad setup --sample > demoproject.conf   (a documented sample conf file)
-#   lilypad create|redeploy|status|extend|destroy <name> | logs <name> [lines]
+#   lilypad create|redeploy|status|extend|destroy|pin|unpin <name> | logs <name> [lines]   (pin/unpin: admins)
 #   lilypad config url <URL> | update | '<json>' | - | --how-to
 # Key: $env:LILYPAD_KEY, else %APPDATA%\lilypad\key. URL: $env:LILYPAD_URL, else %APPDATA%\lilypad\url.
 $ErrorActionPreference = 'Stop'
-$Version = '1.0.1'
+$Version = '1.0.2'
 
 function Die([string]$msg) { [Console]::Error.WriteLine("lilypad: $msg"); exit 1 }
 function Usage {
@@ -85,7 +85,7 @@ Demos are deleted after 30 days.
       lilypad list                 # your demos, any status but destroyed
       lilypad extend acme-poc      # expiry = now + 30 days (90 days total at most)
       lilypad destroy acme-poc     # permanent; the name is free for anyone afterwards
-   A warning email arrives on day 27. At most 3 active demos per person.
+   A warning email arrives on day 27. At most 5 active demos per person (25 for admins).
 
 More: lilypad --help, lilypad <command> --help.
 '@ | Write-Output
@@ -237,7 +237,7 @@ switch -Regex ($action) {
     }
     $body = ToJson $o; break
   }
-  '^(create|redeploy|status|extend|destroy)$' {
+  '^(create|redeploy|status|extend|destroy|pin|unpin)$' {
     if ($rest.Count -ne 1) { Usage }
     $body = ToJson @{ action = $action; name = $rest[0] }; break
   }

@@ -57,7 +57,7 @@ done
 "$cli" deploy demo1 >/dev/null; [ "$(last | jq -r .body.action)" = create ] || bad deploy-alias
 "$cli" logs demo1 100 >/dev/null; [ "$(last | jq -r .body.args.lines)" = 100 ] || bad logs
 ok "simple commands"
-[ "$("$cli" --version)" = "lilypad 1.0.1" ] || bad version
+[ "$("$cli" --version)" = "lilypad 1.0.2" ] || bad version
 ok "--version"
 
 printf 'FOO=bar\n' >"$work/app.env"
