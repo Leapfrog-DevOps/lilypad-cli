@@ -26,7 +26,9 @@
   const ACTIVE = new Set(["BUILDING", "DEPLOYING", "RUNNING", "REDEPLOYING"]);
   const DAY = 86400000;
   const TTL_DAYS = 30;
-  const USER_CAP = 3;
+  // Fallback only: the platform's whoami reports the caller's cap (5 per user, 25 per admin at the time of writing).
+  const USER_CAP = 5, ADMIN_CAP = 25;
+  const myCap = () => (S.me && Number.isInteger(S.me.cap) && S.me.cap > 0 ? S.me.cap : isAdmin() ? ADMIN_CAP : USER_CAP);
   const DEFAULT_REFRESH = 300000;
   const REFRESH_OPTS = [[0, "Off"], [10000, "10s"], [30000, "30s"], [60000, "1m"], [120000, "2m"], [180000, "3m"], [300000, "5m"], [600000, "10m"]];
   const SIZES = [
@@ -552,7 +554,7 @@
   async function whoami() {
     if (!apiUrl() || !hasKey()) return null;
     const r = await api({ action: "whoami" });
-    if (r.ok && r.data && r.data.email) { S.me = { email: r.data.email, keyExpiresAt: r.data.keyExpiresAt || "", admin: r.data.admin === true }; S.authBad = false; }
+    if (r.ok && r.data && r.data.email) { S.me = { email: r.data.email, keyExpiresAt: r.data.keyExpiresAt || "", admin: r.data.admin === true, cap: r.data.cap }; S.authBad = false; }
     renderGlobalAlert();
     updateNav(route());
     updateDemos();
@@ -701,7 +703,7 @@
         onbGo("key", r.code === 401 ? "That key isn't valid. It may have been replaced by a newer one; use the latest email." : errText(r));
         return;
       }
-      S.me = { email: r.data.email, keyExpiresAt: r.data.keyExpiresAt || "", admin: r.data.admin === true };
+      S.me = { email: r.data.email, keyExpiresAt: r.data.keyExpiresAt || "", admin: r.data.admin === true, cap: r.data.cap };
       onbGo("done");
     };
     verify.addEventListener("click", submit);
@@ -805,8 +807,8 @@
       stat("g", "i-globe", live, "Live"),
       stat("b", "i-activity", busy, "In progress"),
       stat("y", "i-clock", soon, "Expiring within 7 days"),
-      stat("v", "i-box", Math.min(mine, USER_CAP) + " / " + USER_CAP, "Your active slots",
-        h("div", { class: "slots", "aria-hidden": "true" }, [0, 1, 2].map((i) => h("i", { class: i < mine ? "on" : "" })))));
+      stat("v", "i-box", Math.min(mine, myCap()) + " / " + myCap(), "Your active slots",
+        myCap() <= 10 ? h("div", { class: "slots", "aria-hidden": "true" }, Array.from({ length: myCap() }, (_, i) => h("i", { class: i < mine ? "on" : "" }))) : null));
 
     const cf = $("#client-filter");
     if (cf) {
