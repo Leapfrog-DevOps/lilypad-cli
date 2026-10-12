@@ -1,11 +1,22 @@
 """Tiny stand-in for the platform: records each request as one JSON line, answers 200 {"ok":true}.
-A key of `lpk_bad` gets 401. Usage: mock_server.py <port-file> <log-file>"""
+A key of `lpk_bad` gets 401. Sends CORS headers so web/lilypad.html can be pointed at it.
+Usage: mock_server.py <port-file> <log-file>"""
 import json
 import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 
 class H(BaseHTTPRequestHandler):
+    def cors(self):
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "POST")
+        self.send_header("Access-Control-Allow-Headers", "content-type, x-lilypad-key")
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.cors()
+        self.end_headers()
+
     def do_POST(self):
         n = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(n).decode()
@@ -16,6 +27,7 @@ class H(BaseHTTPRequestHandler):
         out = json.dumps({"ok": code == 200}).encode()
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
+        self.cors()
         self.send_header("Content-Length", str(len(out)))
         self.end_headers()
         self.wfile.write(out)

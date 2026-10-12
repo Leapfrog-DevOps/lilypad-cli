@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="Lilypad">
+  <defs>
+    <linearGradient id="lp-g" gradientUnits="userSpaceOnUse" x1="50" y1="40" x2="205" y2="225">
+      <stop offset="0" stop-color="#4ADE80"/><stop offset=".55" stop-color="#16A34A"/><stop offset="1" stop-color="#0B6E3A"/>
+    </linearGradient>
+    <linearGradient id="lp-a" gradientUnits="userSpaceOnUse" x1="150" y1="20" x2="225" y2="120">
+      <stop offset="0" stop-color="#D9F99D"/><stop offset="1" stop-color="#4ADE80"/>
+    </linearGradient>
+    <linearGradient id="lp-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#11362B"/><stop offset="1" stop-color="#06140F"/>
+    </linearGradient>
+    <filter id="lp-s" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="4"/></filter>
+  </defs>
+  <path d="M108.43,145.32 L211.07,109.97 A85,85 0 1 1 156.01,47.75 Z" fill="url(#lp-g)" stroke="url(#lp-g)" stroke-width="14" stroke-linejoin="round"/>
+  <g fill="#fff" opacity=".32"><path d="M138.54,136.04 L193.76,161.07 L194.55,159.46 L140.82,131.36 Z"/><path d="M129.77,141.14 L151.11,197.88 L152.81,197.30 L134.69,139.45 Z"/><path d="M119.96,138.54 L94.93,193.76 L96.54,194.55 L124.64,140.82 Z"/><path d="M114.86,129.77 L58.12,151.11 L58.70,152.81 L116.55,134.69 Z"/><path d="M117.46,119.96 L62.24,94.93 L61.45,96.54 L115.18,124.64 Z"/><path d="M126.23,114.86 L104.89,58.12 L103.19,58.70 L121.31,116.55 Z"/></g>
+  <g transform="translate(11.23,-9.94)"><g opacity=".35" filter="url(#lp-s)" transform="translate(2,7)"><path d="M147.57,110.68 L173.99,56.52 A85,85 0 0 1 204.56,91.06 Z" fill="#04261A" stroke="#04261A" stroke-width="14" stroke-linejoin="round"/></g><path d="M147.57,110.68 L173.99,56.52 A85,85 0 0 1 204.56,91.06 Z" fill="url(#lp-a)" stroke="url(#lp-a)" stroke-width="14" stroke-linejoin="round"/><g fill="#fff" opacity=".5"><path d="M148.73,112.19 L183.65,79.83 L182.59,78.63 L146.21,109.35 Z"/></g></g>
+</svg>

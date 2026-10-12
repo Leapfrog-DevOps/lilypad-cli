@@ -1,0 +1,49 @@
+# nginx site for the web client container (see Dockerfile). TLS ends at the platform's load balancer.
+# This is a template: at start the image runs envsubst on it, filling ${LILYPAD_API_URL} and
+# ${LILYPAD_DEMO_DOMAIN} (set them as the demo's env vars). Only defined variables are replaced, so
+# nginx's own $variables are left alone.
+server {
+    listen 8080;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+    server_tokens off;
+    charset utf-8;
+
+    # Same policy as the page's meta tag, plus frame-ancestors (a meta tag cannot set it).
+    add_header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https:; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "no-referrer" always;
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    # Revalidate everything so a redeploy shows up at once (files are small; ETags make it cheap).
+    add_header Cache-Control "no-cache" always;
+
+    # Platform health check.
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    # Lets the page find the platform without asking the user. A location with its own add_header
+    # drops the server-level ones, so the important ones are repeated.
+    location = /config.json {
+        default_type application/json;
+        add_header Cache-Control "no-store" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        return 200 '{"apiUrl":"${LILYPAD_API_URL}","demoDomain":"${LILYPAD_DEMO_DOMAIN}"}';
+    }
+
+    location = / {
+        try_files /index.html =404;
+    }
+
+    location /assets/ {
+        try_files $uri =404;
+    }
+
+    # Nothing else is served.
+    location / {
+        return 404;
+    }
+}

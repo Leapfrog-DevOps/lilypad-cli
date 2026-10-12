@@ -1,0 +1,5 @@
+# Only the web client goes into the image.
+*
+!web/index.html
+!web/assets/
+!web/nginx.conf.template

@@ -71,6 +71,28 @@ One `KEY=VALUE` per line; `#` starts a comment; values may be quoted. The keys a
 
 `lilypad --how-to` prints a step-by-step guide to deploying a demo. `lilypad --help` lists everything; `lilypad <command> --help` explains one command. The GitHub PAT for `setup` is read from `$GITHUB_PAT` or a hidden prompt, never from an option.
 
+## Web app
+
+[`web/`](web/) is a browser version of the CLI: `index.html` plus `assets/` (CSS, JS, logo), no build step and no dependencies. Use the hosted copy (the demo named `lilypad`; ask your Lilypad admin for the address). The platform only accepts browser requests from that address, so a local copy works only against the mock server.
+
+- **Onboarding**: connect to the platform (skipped when the site provides the URL), email yourself a key, paste it.
+- **Demos**: cards with live status, build progress, expiry and actions (open, logs, deploy, redeploy, extend, edit, destroy). Search, client filter, auto-refresh (5 minutes by default; 10s to 10m, or off).
+- **Demo panel**: overview with health and stage, live-tail logs, settings, danger zone.
+- **New demo / Edit settings**: a five-step wizard (name, source, runtime, environment, review) that saves, waits for the repo check, then deploys. Env values are never returned by the platform, so re-enter them when editing. The GitHub PAT is sent once and never stored.
+- **Help** (guide, FAQ, raw JSON requests like `lilypad -`) and **Settings** (account, platform URL, theme, auto-refresh).
+
+The key and URL live in this browser's `localStorage`, so use it on your own machine only.
+
+The repo's `Dockerfile` serves `web/` with nginx on port 8080, so Lilypad can host it as a demo of its own. Put the platform URL in an env file so users skip the connect step:
+
+```bash
+echo "LILYPAD_API_URL=<platform URL>" > web.env
+lilypad setup lilypad --repo https://github.com/Leapfrog-DevOps/lilypad-cli --port 8080 --health /healthz --size tiny --env-file web.env
+lilypad create lilypad
+```
+
+Try it locally: `python3 tests/mock_server.py /tmp/port /tmp/log &`, serve `web/` with `python3 -m http.server`, and enter `http://127.0.0.1:<port>/` as the platform URL.
+
 ## Files and variables
 
 | Item | Mac/Linux | Windows |
