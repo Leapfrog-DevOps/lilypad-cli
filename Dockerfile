@@ -7,8 +7,11 @@
 # Docker Hub's anonymous pull limits in CodeBuild.
 FROM public.ecr.aws/nginx/nginx-unprivileged:stable-alpine
 
+# Only LILYPAD_* variables are substituted into the nginx template, so nginx's own $host, $uri, ...
+# stay intact even if the container has an env var of the same name.
 ENV LILYPAD_API_URL="" \
-    LILYPAD_DEMO_DOMAIN=""
+    LILYPAD_DEMO_DOMAIN="" \
+    NGINX_ENVSUBST_FILTER="^LILYPAD_"
 
 COPY web/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY web/index.html /usr/share/nginx/html/index.html

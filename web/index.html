@@ -3,13 +3,42 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https: http://127.0.0.1:* http://localhost:*; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https: http://127.0.0.1:* http://localhost:*; img-src 'self' data:; manifest-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#111111">
-<meta name="description" content="Lilypad: turn a GitHub repo into a live, disposable demo.">
-<title>Lilypad</title>
+<title>Lilypad · Live demos from any GitHub repo</title>
+<meta name="description" content="Turn a GitHub repo with a Dockerfile into a live, shareable HTTPS demo in minutes. Self-serve demos by Leapfrog.">
+<meta name="application-name" content="Lilypad">
+<meta name="apple-mobile-web-app-title" content="Lilypad">
+<!-- Internal tool: keep it out of search results (link previews still work). -->
+<meta name="robots" content="noindex, nofollow">
+<!--
+  Social previews need absolute URLs. __SITE_URL__ is replaced with https://<host> by nginx
+  (sub_filter in nginx.conf.template), so no hostname is baked into this file.
+-->
+<link rel="canonical" href="__SITE_URL__/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Lilypad">
+<meta property="og:locale" content="en_US">
+<meta property="og:url" content="__SITE_URL__/">
+<meta property="og:title" content="Lilypad · Live demos from any GitHub repo">
+<meta property="og:description" content="Point Lilypad at a GitHub repo with a Dockerfile. It builds it, runs it and hands you an HTTPS link to share with your client.">
+<meta property="og:image" content="__SITE_URL__/assets/og-image.png">
+<meta property="og:image:secure_url" content="__SITE_URL__/assets/og-image.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Lilypad by Leapfrog: from repo to live demo in minutes.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Lilypad · Live demos from any GitHub repo">
+<meta name="twitter:description" content="Turn a GitHub repo with a Dockerfile into a live, shareable HTTPS demo in minutes.">
+<meta name="twitter:image" content="__SITE_URL__/assets/og-image.png">
+<meta name="twitter:image:alt" content="Lilypad by Leapfrog: from repo to live demo in minutes.">
 <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
+<link rel="manifest" href="assets/site.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap">
