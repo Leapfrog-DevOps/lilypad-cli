@@ -82,7 +82,7 @@ Demos are deleted after 30 days.
    Check that --port matches the container and --health returns 200-399 without a login.
 
 9. Lifecycle
-      lilypad list                 # active demos
+      lilypad list                 # your demos, any status but destroyed
       lilypad extend acme-poc      # expiry = now + 30 days (90 days total at most)
       lilypad destroy acme-poc     # permanent; the name is free for anyone afterwards
    A warning email arrives on day 27. At most 3 active demos per person.

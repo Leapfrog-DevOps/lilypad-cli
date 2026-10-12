@@ -8,7 +8,7 @@
 #   lilypad --how-to                          step-by-step guide: deploy a demo, use the tool
 #   lilypad logout                            delete the saved key
 #   lilypad whoami                            your email, key expiry, admin or not
-#   lilypad list [--client C]                 active demos, optionally one client's
+#   lilypad list [--client C]                 demos not yet destroyed, optionally one client's
 #   lilypad setup [<name>] [--conf FILE] [--repo <url>] [--client C] [--branch B] [--port N]
 #                  [--health /path] [--size tiny|small|medium|large] [--env-file FILE]
 #                                             save config (GitHub PAT from $GITHUB_PAT or a hidden prompt)
@@ -87,7 +87,7 @@ Demos are deleted after 30 days.
    Check that --port matches the container and --health returns 200-399 without a login.
 
 9. Lifecycle
-      lilypad list                 # active demos
+      lilypad list                 # your demos, any status but destroyed
       lilypad extend acme-poc      # expiry = now + 30 days (90 days total at most)
       lilypad destroy acme-poc     # permanent; the name is free for anyone afterwards
    A warning email arrives on day 27. At most 3 active demos per person.
@@ -242,7 +242,7 @@ EOT
     list) cat <<'EOT'
 lilypad list [--client <client>]
 
-List the active demos with client, owner and expiry.
+List your demos (admins: everyone's) that are not destroyed: set up, building, live or failed, with client, owner, status and expiry.
 
 Options:
   --client <client>   only that client's demos

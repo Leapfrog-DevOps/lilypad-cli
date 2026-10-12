@@ -308,8 +308,8 @@
   }
 
   // ---------------------------------------------------------------------------------------------
-  // Tracked names: demos set up or opened in this browser. `list` returns only active demos, so
-  // CONFIGURED and FAILED ones would otherwise vanish from the dashboard.
+  // Tracked names: demos set up or opened in this browser. `list` returns every demo that isn't
+  // DESTROYED, but older platforms return only active ones, and admins may open others' demos by name.
   // ---------------------------------------------------------------------------------------------
   function tracked() {
     try { const a = JSON.parse(store.get(K.tracked) || "[]"); return Array.isArray(a) ? a.filter((n) => NAME_RE.test(n)) : []; }
@@ -1640,7 +1640,7 @@
       ["Clean up", "Demos expire after 30 days, with a warning on day 27. Extend adds 30 days, up to 90 in total. Destroy when you're done."],
     ];
     const faq = [
-      ["Why isn't my demo on the dashboard?", "The dashboard lists active demos (building, deploying, live, updating). The platform doesn't list demos that are ready to deploy or failed; open them by name at the bottom of the Demos page. Ones you set up in this browser show up automatically."],
+      ["Why isn't my demo on the dashboard?", "The dashboard lists your demos that aren't destroyed (admins see everyone's). If one is missing, refresh, or open it by name at the bottom of the Demos page."],
       ["The build failed. What now?", "Open the demo and check Logs and the status report. The usual suspects: no Dockerfile at the root, the wrong port, or a health path that needs a login."],
       ["How long does a demo live?", "30 days. You get a warning email on day 27. Extend moves the expiry to 30 days from now, up to 90 days in total."],
       ["Can I change settings after deploying?", "Yes: Edit settings, save, then Redeploy. The client part of the address is fixed after the first deploy; destroy and set up again to change it."],
