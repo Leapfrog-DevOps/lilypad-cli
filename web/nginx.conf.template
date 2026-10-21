@@ -43,6 +43,13 @@ server {
         try_files /index.html =404;
     }
 
+    # Shareable guide link: /help opens the in-app guide, which needs no platform URL or key.
+    # Relative redirect, since TLS ends at the load balancer and nginx only sees http.
+    location ~ ^/help/?$ {
+        absolute_redirect off;
+        return 302 /#/help;
+    }
+
     location /assets/ {
         try_files $uri =404;
     }

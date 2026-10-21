@@ -7,7 +7,7 @@
   localStorage; the GitHub PAT is sent once and never stored.
 
   Views (hash routes): #/welcome (onboarding), #/demos, #/demo/<name>?tab=overview|logs|settings
-  (detail drawer over the dashboard), #/new, #/edit/<name>, #/help, #/settings.
+  (detail drawer over the dashboard), #/new, #/edit/<name>, #/help (also public, no key needed), #/settings.
 */
 "use strict";
 (function () {
@@ -467,6 +467,7 @@
   function render() {
     closeMenu();
     const r = route();
+    if (r.view === "help" && (!apiUrl() || !hasKey())) { if (S.drawer) closeDrawer(true); renderPublicHelp(); return; }
     if (!apiUrl() || !hasKey() || r.view === "welcome") { if (S.drawer) closeDrawer(true); renderOnboarding(r); return; }
     const pageKey = r.view === "demo" ? "demos" : r.view + "/" + r.arg + "?" + r.q.toString();
     if (!$(".topbar") || S.page !== pageKey) {
@@ -490,7 +491,7 @@
     if (r.view === "demos" || r.view === "demo") renderDemos(main);
     else if (r.view === "new") renderWizard(main, null);
     else if (r.view === "edit" && NAME_RE.test(r.arg)) renderWizard(main, r.arg);
-    else if (r.view === "help") renderHelp(main);
+    else if (r.view === "help") renderHelp(main, true);
     else if (r.view === "settings") renderSettings(main);
     else { go("demos"); return; }
     window.scrollTo(0, 0);
@@ -613,6 +614,8 @@
     const err = S.onb.error ? h("div", { class: "alert alert-err mt-16", role: "alert" }, icon("i-alert"), h("div", { class: "alert-body", text: S.onb.error })) : null;
     S.onb.error = "";
     ({ connect: onbConnect, email: onbEmail, key: onbKey, done: onbDone }[S.onb.step] || onbEmail)(step, err);
+    card.append(h("p", { class: "onb-help" }, icon("i-help", "icon-s"), "New to Lilypad? ",
+      h("button", { class: "linklike", type: "button", text: "How to set up and deploy", onclick: helpModal })));
     const first = step.querySelector("input");
     if (first) first.focus();
   }
@@ -1649,26 +1652,80 @@
   // ---------------------------------------------------------------------------------------------
   // Help
   // ---------------------------------------------------------------------------------------------
-  function renderHelp(main) {
-    const steps = [
-      ["Prepare the repo", "A Dockerfile at the repo root. The app listens on one port (8080 by default) and has a path that answers 200 without a login."],
-      ["Create a GitHub token", "A fine-grained personal access token with read-only Contents access to that one repo."],
-      ["Set up the demo", "New demo: pick a name, paste the repo and token, choose port, health path and size."],
-      ["Deploy", "Save & deploy. It takes 5–10 minutes. You get an email when it's live, or if it fails."],
-      ["Share and iterate", "Send the link. Push new code, then Redeploy. Change settings with Edit settings, then Redeploy."],
-      ["Clean up", "Demos expire after 30 days, with a warning on day 27. Extend adds 30 days, up to 90 in total. Destroy when you're done."],
-    ];
-    const faq = [
-      ["Why isn't my demo on the dashboard?", "The dashboard lists your demos that aren't destroyed (admins see everyone's). If one is missing, refresh, or open it by name at the bottom of the Demos page."],
-      ["The build failed. What now?", "Open the demo and check Logs and the status report. The usual suspects: no Dockerfile at the root, the wrong port, or a health path that needs a login."],
-      ["How long does a demo live?", "30 days. You get a warning email on day 27. Extend moves the expiry to 30 days from now, up to 90 days in total."],
-      ["Can I change settings after deploying?", "Yes: Edit settings, save, then Redeploy. The client part of the address is fixed after the first deploy; destroy and set up again to change it."],
-      ["Can I put secrets in environment variables?", "No. Platform operators can read them. Use test credentials only."],
-      ["How many demos can I run?", "Five active demos per person (25 for admins). Destroy one to free a slot. Demos an admin made permanent don't count."],
-      ["Who can open or manage my demo?", "Anyone with the link can open the app itself, so add your own login if it needs one. Only you and Lilypad admins can see its status and logs, extend it or destroy it."],
-      ["Where is my key kept?", "In this browser's local storage. Sign out removes it. Requesting a new key replaces the old one everywhere."],
-      ["Keyboard shortcuts?", "/ search · n new demo · r refresh · ? help · Esc closes panels and menus."],
-    ];
+  // Signing in. Shown on the public help page and in the onboarding guide.
+  const ACCESS_STEPS = [
+    ["Open Lilypad", "Most people land here already connected. If you're asked for a platform URL, paste the https:// address your Lilypad admin gave you."],
+    ["Request a key", "Enter your exact @" + EMAIL_DOMAIN + " address. Lilypad emails you an access key; there's no password."],
+    ["Paste the key", "Copy the key (it starts with lpk_) from the email “Your Lilypad access key” and paste it in. It works for 30 days in this browser."],
+  ];
+  const DEPLOY_STEPS = [
+    ["Prepare the repo", "A Dockerfile at the repo root. The app listens on one port (8080 by default) and has a path that answers 200 without a login."],
+    ["Create a GitHub token", "A fine-grained personal access token with read-only Contents access to that one repo."],
+    ["Set up the demo", "New demo: pick a name, paste the repo and token, choose port, health path and size."],
+    ["Deploy", "Save & deploy. It takes 5–10 minutes. You get an email when it's live, or if it fails."],
+    ["Share and iterate", "Send the link. Push new code, then Redeploy. Change settings with Edit settings, then Redeploy."],
+    ["Clean up", "Demos expire after 30 days, with a warning on day 27. Extend adds 30 days, up to 90 in total. Destroy when you're done."],
+  ];
+  const FAQ = [
+    ["The key email didn't arrive.", "It usually takes under a minute. Check spam or junk, and that you used your plain @" + EMAIL_DOMAIN + " address (no + aliases). You can ask for a new key once a minute."],
+    ["Why isn't my demo on the dashboard?", "The dashboard lists your demos that aren't destroyed (admins see everyone's). If one is missing, refresh, or open it by name at the bottom of the Demos page."],
+    ["The build failed. What now?", "Open the demo and check Logs and the status report. The usual suspects: no Dockerfile at the root, the wrong port, or a health path that needs a login."],
+    ["How long does a demo live?", "30 days. You get a warning email on day 27. Extend moves the expiry to 30 days from now, up to 90 days in total."],
+    ["Can I change settings after deploying?", "Yes: Edit settings, save, then Redeploy. The client part of the address is fixed after the first deploy; destroy and set up again to change it."],
+    ["Can I put secrets in environment variables?", "No. Platform operators can read them. Use test credentials only."],
+    ["How many demos can I run?", "Five active demos per person (25 for admins). Destroy one to free a slot. Demos an admin made permanent don't count."],
+    ["Who can open or manage my demo?", "Anyone with the link can open the app itself, so add your own login if it needs one. Only you and Lilypad admins can see its status and logs, extend it or destroy it."],
+    ["Where is my key kept?", "In this browser's local storage. Sign out removes it. Requesting a new key replaces the old one everywhere."],
+    ["Keyboard shortcuts?", "/ search · n new demo · r refresh · ? help · Esc closes panels and menus."],
+  ];
+  const helpGrid = (steps) => h("div", { class: "help-grid" }, steps.map((s, i) => h("div", { class: "card help-step" }, h("div", { class: "n", text: String(i + 1) }), h("h3", { text: s[0] }), h("p", { text: s[1] }))));
+  const helpList = (steps) => h("ol", { class: "help-list" }, steps.map((s) => h("li", null, h("strong", { text: s[0] }), h("span", { text: s[1] }))));
+
+  // #/help without a key: the same guide, no platform calls.
+  function renderPublicHelp() {
+    const app = clear($("#app"));
+    S.page = "";
+    app.append(h("header", { class: "topbar" }, h("div", { class: "topbar-in" }, brand(true), h("div", { class: "spacer" }),
+      btn("Sign in", { cls: "btn-primary", icon: "i-key", href: "#/welcome" }))),
+      h("main", { class: "page", id: "main", tabindex: "-1" }));
+    renderHelp($("#main"), false);
+    window.scrollTo(0, 0);
+  }
+
+  // The onboarding guide: a scrollable modal, so the step in progress is kept.
+  function helpModal() {
+    const prev = document.activeElement;
+    const close = btn("Close", { cls: "btn-primary" });
+    const scrim = h("div", { class: "scrim modal-scrim" });
+    const card = h("div", { class: "modal-card modal-wide", role: "dialog", "aria-modal": "true", "aria-labelledby": "modal-title" },
+      h("div", { class: "modal-ico ok" }, icon("i-help")),
+      h("h2", { id: "modal-title", text: "How to set up and deploy" }),
+      h("p", { text: "From a GitHub repo to a shareable HTTPS demo." }),
+      h("h3", { class: "help-h", text: "1. Get access" }), helpList(ACCESS_STEPS),
+      h("h3", { class: "help-h", text: "2. Deploy a demo" }), helpList(DEPLOY_STEPS),
+      h("div", { class: "modal-actions" }, btn("Full guide & FAQ", { cls: "btn-ghost", icon: "i-external", href: "#/help", external: true }), close));
+    const wrap = h("div", { class: "modal" }, card);
+    function onKey(e) { if (e.key === "Escape") { e.stopPropagation(); done(); } }
+    function done() { scrim.remove(); wrap.remove(); document.removeEventListener("keydown", onKey, true); if (prev && prev.focus) prev.focus(); }
+    close.addEventListener("click", done);
+    wrap.addEventListener("click", (e) => { if (e.target === wrap) done(); });
+    document.addEventListener("keydown", onKey, true);
+    document.body.append(scrim, wrap);
+    close.focus();
+  }
+
+  function renderHelp(main, signedIn) {
+    if (!signedIn) {
+      add(main, [
+        h("div", { class: "page-head" }, h("div", { class: "grow" }, h("h1", { text: "How Lilypad works" }),
+          h("p", { class: "sub", text: "Sign in, then go from a GitHub repo to a shareable HTTPS demo." }))),
+        h("h2", { class: "section-h", text: "Get access" }), helpGrid(ACCESS_STEPS),
+        h("h2", { class: "section-h", text: "Deploy a demo" }), helpGrid(DEPLOY_STEPS),
+        h("h2", { class: "section-h", text: "Questions" }),
+        h("div", { class: "card faq" }, FAQ.map((f) => h("details", null, h("summary", { text: f[0] }), h("p", { text: f[1] })))),
+      ]);
+      return;
+    }
     const raw = h("textarea", { class: "textarea", id: "raw-body", spellcheck: "false", "aria-label": "Request body" });
     raw.value = '{"action":"whoami"}';
     const out = h("pre", { class: "raw-out", hidden: true });
@@ -1689,9 +1746,9 @@
       h("div", { class: "page-head" }, h("div", { class: "grow" }, h("h1", { text: "How Lilypad works" }),
         h("p", { class: "sub", text: "From a GitHub repo to a shareable HTTPS demo in six steps." })),
         btn("New demo", { cls: "btn-primary btn-lg", icon: "i-plus", href: "#/new" })),
-      h("div", { class: "help-grid" }, steps.map((s, i) => h("div", { class: "card help-step" }, h("div", { class: "n", text: String(i + 1) }), h("h3", { text: s[0] }), h("p", { text: s[1] })))),
+      helpGrid(DEPLOY_STEPS),
       h("h2", { class: "section-h", text: "Questions" }),
-      h("div", { class: "card faq" }, faq.map((f) => h("details", null, h("summary", { text: f[0] }), h("p", { text: f[1] })))),
+      h("div", { class: "card faq" }, FAQ.map((f) => h("details", null, h("summary", { text: f[0] }), h("p", { text: f[1] })))),
       h("h2", { class: "section-h", text: "Advanced" }),
       h("div", { class: "card card-pad" },
         h("h3", { text: "Raw request" }),
