@@ -1501,7 +1501,7 @@
       rowsBox,
       h("div", { class: "row mt-16" }, addRow, btn("Paste .env", { cls: "btn-sm btn-ghost", icon: "i-file", onclick: () => { pasteWrap.hidden = false; pasteBox.focus(); } })),
       pasteWrap,
-      h("div", { class: "alert alert-warn mt-24" }, icon("i-shield"), h("div", { class: "alert-body", text: "No real secrets here: platform operators can read these values." })),
+      h("div", { class: "alert alert-warn mt-24" }, icon("i-shield"), h("div", { class: "alert-body", text: "Platform admins can read these values." })),
     ]);
   }
   function parseEnv(text) {
@@ -1643,7 +1643,7 @@
       foot.append(btn("Back to the form", { cls: "btn-primary", icon: "i-edit", onclick: () => { W.progress = null; W.step = 4; renderWiz(); } }));
     } else if (P.done) {
       foot.append(btn("Back to demos", { cls: "btn-ghost", href: "#/demos" }), h("span", { class: "grow" }),
-        P.deploy ? null : btn("Deploy now", { icon: "i-rocket", onclick: runDeployStep }),
+        ...(P.deploy ? [] : [btn("Deploy now", { icon: "i-rocket", onclick: runDeployStep })]),
         btn("View demo", { cls: "btn-primary btn-lg", icon: "i-right", href: "#/demo/" + encodeURIComponent(P.name) }));
     }
     if (foot.childNodes.length) panel.append(foot);
