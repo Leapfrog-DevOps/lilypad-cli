@@ -88,7 +88,7 @@ GITHUB_AUTH="$HOME/.ssh/lp_test" "$cli" setup demo1 --repo https://github.com/o/
 [ "$(last | jq -r .body.args.githubPat)" = "$(cat "$HOME/.ssh/lp_test")" ] || bad "deploy key file contents not sent"
 # shellcheck disable=SC2088  # the literal ~/ is the point: the CLI must expand it
 GITHUB_AUTH="~/.ssh/lp_test" "$cli" setup demo1 --repo https://github.com/o/r >/dev/null </dev/null
-[ "$(last | jq -r .body.args.githubPat)" = "$(cat "$HOME/.ssh/lp_test")" ] || bad "~/ not expanded"
+[ "$(last | jq -r .body.args.githubPat)" = "$(cat "$HOME/.ssh/lp_test")" ] || bad "leading tilde path not expanded"
 ok "GITHUB_AUTH=<key file> (and ~/key file) sends the private key text"
 n_before="$(wc -l <"$work/log" | tr -d ' ')"
 out="$(GITHUB_AUTH="$HOME/.ssh/lp_test.pub" "$cli" setup demo1 --repo https://github.com/o/r 2>&1 </dev/null)" && bad ".pub accepted"
@@ -124,7 +124,6 @@ cat >"$work/proj/app.env" <<'EOF'
 FOO=bar
 EOF
 printf '\xef\xbb\xbf# comment\r\nexport NAME=confdemo   # inline comment\r\nREPO="https://github.com/o/r"\r\nCLIENT=\r\nBRANCH='"'"'dev'"'"'\r\nPORT=3000\r\nHEALTH=/health # ok\r\nSIZE=tiny\r\nENV_FILE=app.env\r\n' >"$work/proj/demoproject.conf"
-before="$(sent)"
 GITHUB_PAT=github_pat_x "$cli" setup --conf "$work/proj/demoproject.conf" >/dev/null </dev/null
 a="$(last | jq -c '.body')"
 [ "$(jq -r .action <<<"$a")" = setup ] && [ "$(jq -r .name <<<"$a")" = confdemo ] || bad "conf name: $a"
