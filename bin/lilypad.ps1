@@ -4,7 +4,7 @@
 #   lilypad list [--client C]
 #   lilypad setup [<name>] [--conf FILE] [--repo <url>] [--client C] [--branch B] [--port N] [--health /p] [--size S] [--env-file F]
 #   lilypad setup --sample > demoproject.conf   (a documented sample conf file)
-#   lilypad create|redeploy|status|extend|destroy|pin|unpin <name> | logs <name> [lines]   (pin/unpin: admins)
+#   lilypad create|redeploy|status|extend|destroy|pin|unpin <name> | logs|build-logs <name> [lines]   (pin/unpin: admins; logs = app, build-logs = build)
 #   lilypad config url <URL> | update | '<json>' | - | --how-to
 # Key: $env:LILYPAD_KEY, else %APPDATA%\lilypad\key. URL: $env:LILYPAD_URL, else %APPDATA%\lilypad\url.
 $ErrorActionPreference = 'Stop'
@@ -64,7 +64,7 @@ Demos are deleted after 30 days.
    Name (the project): 3-24 chars, lowercase letters, digits, hyphens, starts with a letter.
    Client (optional): 1-20 chars, lowercase letters, digits, hyphens. The address becomes
    <name>-<client> (shop-acme) and every resource is tagged Client=acme. Fixed once deployed.
-   Size: tiny, small (default), medium (large is admin-only).
+   Size: tiny (default), small, medium (large is admin-only).
    Then check it: lilypad status acme-poc   # expect "Repo readable, Dockerfile found"
 
 6. Deploy
@@ -78,7 +78,8 @@ Demos are deleted after 30 days.
 
 8. When it fails or misbehaves
       lilypad status acme-poc
-      lilypad logs acme-poc 200
+      lilypad build-logs acme-poc 200   # the build: clone, docker build, push
+      lilypad logs acme-poc 200         # the running app
    Check that --port matches the container and --health returns 200-399 without a login.
 
 9. Lifecycle
@@ -118,7 +119,7 @@ PORT=8080
 HEALTH=/
 
 # tiny | small | medium | large (large is admin-only)
-SIZE=small
+SIZE=tiny
 
 # Optional file of KEY=VALUE environment variables for the demo itself (no real secrets).
 # A relative path is relative to this file. Leave it out to clear the demo's env vars.
@@ -241,9 +242,9 @@ switch -Regex ($action) {
     if ($rest.Count -ne 1) { Usage }
     $body = ToJson @{ action = $action; name = $rest[0] }; break
   }
-  '^logs$' {
+  '^(logs|build-logs)$' {
     if ($rest.Count -lt 1 -or $rest.Count -gt 2) { Usage }
-    $o = @{ action = 'logs'; name = $rest[0] }
+    $o = @{ action = $action; name = $rest[0] }
     if ($rest.Count -eq 2 -and $rest[1]) { $o.args = @{ lines = $rest[1] } }
     $body = ToJson $o; break
   }

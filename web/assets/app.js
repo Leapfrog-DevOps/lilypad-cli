@@ -6,7 +6,7 @@
   platform goes through textContent (never innerHTML). The platform URL and key are kept in
   localStorage; the GitHub PAT is sent once and never stored.
 
-  Views (hash routes): #/welcome (onboarding), #/demos, #/demo/<name>?tab=overview|logs|settings
+  Views (hash routes): #/welcome (onboarding), #/demos, #/demo/<name>?tab=overview|logs|build|settings
   (detail drawer over the dashboard), #/new, #/edit/<name>, #/help (also public, no key needed), #/settings.
 */
 "use strict";
@@ -32,8 +32,8 @@
   const DEFAULT_REFRESH = 300000;
   const REFRESH_OPTS = [[0, "Off"], [10000, "10s"], [30000, "30s"], [60000, "1m"], [120000, "2m"], [180000, "3m"], [300000, "5m"], [600000, "10m"]];
   const SIZES = [
-    { id: "tiny", spec: "0.25 vCPU · 512 MiB", d: "Static sites, small APIs" },
-    { id: "small", spec: "0.5 vCPU · 1 GiB", d: "Most demos", def: true },
+    { id: "tiny", spec: "0.25 vCPU · 512 MiB", d: "Static sites, small APIs", def: true },
+    { id: "small", spec: "0.5 vCPU · 1 GiB", d: "Most demos" },
     { id: "medium", spec: "1 vCPU · 2 GiB", d: "Heavier apps" },
     { id: "large", spec: "2 vCPU · 4 GiB", d: "Admins only", admin: true },
   ];
@@ -866,7 +866,7 @@
       h("div", { class: "track-labels", "aria-hidden": "true" }, labels.map((l, i) => h("span", { class: states[i] ? "on" : "", text: l }))));
   }
   function stageText(d) {
-    if (d.status === "FAILED") return "Something went wrong. Open it to see the logs.";
+    if (d.status === "FAILED") return buildFailed(d) ? "The build failed. Open it to see the build log." : "Something went wrong. Open it to see the logs.";
     if (d.status === "CONFIGURED") return "Settings saved. Deploy when you're ready.";
     if (category(d) !== "busy") return "";
     const s = d.stage || STAGE_DEFAULT[d.status] || "";
@@ -900,7 +900,10 @@
       primary = btn(d.status === "FAILED" ? "Retry deploy" : "Deploy", { cls: "btn-sm btn-primary", icon: "i-rocket" });
       primary.addEventListener("click", (e) => { e.stopPropagation(); runAction("create", d.name, primary); });
     }
-    const logs = btn("Logs", { cls: "btn-sm btn-ghost", icon: "i-terminal", href: "#/demo/" + encodeURIComponent(d.name) + "?tab=logs" });
+    // A failed build never started the app, so its card links to the build log instead of the (empty) app logs.
+    const logs = buildFailed(d)
+      ? btn("Build log", { cls: "btn-sm btn-ghost", icon: "i-terminal", href: "#/demo/" + encodeURIComponent(d.name) + "?tab=build" })
+      : btn("Logs", { cls: "btn-sm btn-ghost", icon: "i-terminal", href: "#/demo/" + encodeURIComponent(d.name) + "?tab=logs" });
 
     const stage = stageText(d);
     const card = h("article", { class: "card demo", tabindex: "0", "aria-label": d.name + ", " + statusLabel(d) },
@@ -925,7 +928,8 @@
     const s = d.status, n = encodeURIComponent(d.name);
     return [
       { icon: "i-info", label: "View details", run: () => go("demo/" + n) },
-      { icon: "i-terminal", label: "Logs", run: () => go("demo/" + n + "?tab=logs") },
+      { icon: "i-terminal", label: "App logs", run: () => go("demo/" + n + "?tab=logs") },
+      { icon: "i-terminal", label: "Build log", run: () => go("demo/" + n + "?tab=build") },
       (s === "CONFIGURED" || s === "FAILED") && isMine(d) ? { icon: "i-rocket", label: "Deploy", run: () => runAction("create", d.name) } : null,
       s === "RUNNING" && isMine(d) ? { icon: "i-redo", label: "Redeploy latest commit", run: () => runAction("redeploy", d.name) } : null,
       s === "RUNNING" && !d.permanent ? { icon: "i-calendar", label: "Extend 30 days", run: () => runAction("extend", d.name) } : null,
@@ -988,11 +992,13 @@
     updateDemos();
     refreshDrawerHead();
     // Re-render everything except a log view that's already up (that would reset its scroll and tail).
-    if (D.tab !== "logs" || !$("#term")) renderDrawerBody();
+    if (!isLogTab(D.tab) || !$("#term")) renderDrawerBody();
   }
   function setTab(tab) {
     const D = S.drawer;
     if (!D) return;
+    // App logs and the build log share one terminal; switching starts the new one clean.
+    if (D.tab !== tab) Object.assign(D, { logs: [], all: [], mark: null, clearedAt: null, empty: null, build: null });
     D.tab = tab;
     history.replaceState(null, "", "#/demo/" + encodeURIComponent(D.name) + (tab === "overview" ? "" : "?tab=" + tab));
     refreshDrawerHead();
@@ -1028,12 +1034,12 @@
       if (s === "RUNNING" && isAdmin()) { const b = btn(d.permanent ? "Unpin" : "Make permanent", { icon: "i-pin" }); b.addEventListener("click", () => runAction(d.permanent ? "unpin" : "pin", D.name, b)); acts.append(b); }
       if (s !== "DESTROYING" && mine) acts.append(btn("Edit settings", { icon: "i-edit", href: "#/edit/" + encodeURIComponent(D.name) }));
       const rb = btn("", { cls: "btn-ghost btn-icon", icon: "i-refresh", aria: "Refresh", title: "Refresh" });
-      rb.addEventListener("click", async () => { rb.querySelector("svg").classList.add("spin"); await loadDrawer(); if (S.drawer && S.drawer.tab === "logs") loadLogs(); });
+      rb.addEventListener("click", async () => { rb.querySelector("svg").classList.add("spin"); await loadDrawer(); if (S.drawer && isLogTab(S.drawer.tab)) loadLogs(); });
       acts.append(rb);
     }
     head.append(acts);
     if (!missing) {
-      head.append(h("div", { class: "tabs", role: "tablist" }, [["overview", "Overview"], ["logs", "Logs"], ["settings", "Settings"]].map(([id, label]) =>
+      head.append(h("div", { class: "tabs", role: "tablist" }, [["overview", "Overview"], ["logs", "App logs"], ["build", "Build log"], ["settings", "Settings"]].map(([id, label]) =>
         h("button", { type: "button", role: "tab", "aria-selected": D.tab === id ? "true" : "false", text: label, onclick: () => setTab(id) }))));
     }
   }
@@ -1054,7 +1060,7 @@
       return;
     }
     if (!D.r.ok) { body.append(h("div", { class: "alert alert-err" }, icon("i-alert"), h("div", { class: "alert-body", text: errText(D.r) }))); return; }
-    if (D.tab === "logs") renderLogsTab(body);
+    if (isLogTab(D.tab)) renderLogsTab(body);
     else if (D.tab === "settings") renderSettingsTab(body);
     else renderOverviewTab(body);
   }
@@ -1140,6 +1146,12 @@
     ]);
   }
 
+  // Two log views share the terminal: the running app's logs and the latest build's log (ADR 022).
+  function logAction(tab) { return tab === "build" ? "build-logs" : "logs"; }
+  function isLogTab(tab) { return tab === "logs" || tab === "build"; }
+  // FAILED without an image: the build failed, so no container ever ran.
+  function buildFailed(d) { return d.status === "FAILED" && !d.imageUri; }
+
   function renderLogsTab(body) {
     const D = S.drawer;
     const lines = h("select", { class: "select select-sm", "aria-label": "Lines" }, [50, 100, 200, 500].map((n) => h("option", { value: String(n), text: n + " lines", selected: n === D.logLines })));
@@ -1154,7 +1166,8 @@
         btn("Copy", { cls: "btn-sm btn-ghost", icon: "i-copy", onclick: () => copy((D.logs || []).join("\n"), "Logs copied") }),
         btn("Download", { cls: "btn-sm btn-ghost", icon: "i-download", onclick: downloadLogs }),
         btn("Reload", { cls: "btn-sm", icon: "i-refresh", onclick: () => loadLogs() })),
-      h("div", { class: "term", id: "term", tabindex: "0", "aria-label": "Container logs" }, h("span", { class: "dim", text: "Loading logs…" })),
+      D.tab === "build" ? h("p", { class: "hint", id: "build-meta" }) : null,
+      h("div", { class: "term", id: "term", tabindex: "0", "aria-label": D.tab === "build" ? "Build log" : "Container logs" }, h("span", { class: "dim", text: "Loading logs…" })),
     ]);
     loadLogs();
     setTail();
@@ -1167,13 +1180,29 @@
   }
   async function loadLogs(quiet) {
     const D = S.drawer;
-    if (!D || D.tab !== "logs") return;
-    const r = await api({ action: "logs", name: D.name, args: { lines: String(D.logLines) } });
+    if (!D || !isLogTab(D.tab)) return;
+    const tab = D.tab;
+    const r = await api({ action: logAction(tab), name: D.name, args: { lines: String(D.logLines) } });
     const term = $("#term");
-    if (S.drawer !== D || D.tab !== "logs" || !term) return;
+    if (S.drawer !== D || D.tab !== tab || !term) return;
     if (!r.ok) { clear(term); term.append(h("span", { class: "err", text: errText(r) })); return; }
     D.all = r.data && Array.isArray(r.data.lines) ? r.data.lines : [];
+    D.build = r.data && r.data.build ? r.data.build : null;
+    D.empty = r.message || null;
+    renderBuildMeta();
     renderLogLines(quiet);
+  }
+  function renderBuildMeta() {
+    const D = S.drawer;
+    const el = $("#build-meta");
+    if (!D || !el) return;
+    const b = D.build;
+    if (!b) { el.textContent = ""; return; }
+    const st = String(b.status || "unknown").toLowerCase().replace(/_/g, " ");
+    const when = (iso) => (iso ? new Date(iso).toLocaleString() : "");
+    el.textContent = "Build " + st + (b.status === "IN_PROGRESS" && b.phase ? " (" + String(b.phase).toLowerCase() + ")" : "")
+      + (b.started ? " · started " + when(b.started) : "") + (b.ended ? " · ended " + when(b.ended) : "")
+      + ". Logs are kept 7 days.";
   }
   // The platform only returns the last N lines, so Clear can't drop anything server side. It keeps the last
   // few lines on screen as a marker and from then on shows only what follows the marker's last occurrence.
@@ -1216,7 +1245,11 @@
       term.append(h("span", { class: "ln dim" }, "── Cleared at " + D.clearedAt.toLocaleTimeString() + ". Older lines hidden. ", all));
     }
     if (!arr.length) {
-      const msg = !D.clearedAt ? "No logs yet. They appear once the container starts."
+      const d = S.demos.get(D.name);
+      const none = D.tab === "build" ? D.empty || "No build output yet."
+        : d && buildFailed(d) ? "The build failed, so the app never started. See the Build log tab."
+        : "No logs yet. They appear once the container starts.";
+      const msg = !D.clearedAt ? none
         : D.tail ? "Waiting for new lines…" : "No new lines yet. Turn on Live tail or Reload.";
       term.append(h("span", { class: "dim", text: msg }));
       return;
@@ -1231,7 +1264,7 @@
     const D = S.drawer;
     if (!D || !D.logs || !D.logs.length) { toast("No logs to download yet.", "info", 2000); return; }
     const blob = new Blob([D.logs.join("\n") + "\n"], { type: "text/plain" });
-    const a = h("a", { href: URL.createObjectURL(blob), download: D.name + "-logs.txt" });
+    const a = h("a", { href: URL.createObjectURL(blob), download: D.name + (D.tab === "build" ? "-build-logs.txt" : "-logs.txt") });
     document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
@@ -1253,7 +1286,7 @@
     S.wiz = {
       mode: editName ? "edit" : "new",
       step: 0, max: editName ? WSTEPS.length - 1 : 0,
-      data: { name: editName || (NAME_RE.test(pre) ? pre : ""), client: "", repo: "", branch: "main", pat: "", port: "", health: "", size: "small", env: [{ k: "", v: "" }] },
+      data: { name: editName || (NAME_RE.test(pre) ? pre : ""), client: "", repo: "", branch: "main", pat: "", port: "", health: "", size: "tiny", env: [{ k: "", v: "" }] },
       envNames: [], origStatus: "", errors: {}, progress: null, loading: !!editName, loadError: "",
     };
     add(main, [
@@ -1284,7 +1317,7 @@
     W.origStatus = d.status;
     Object.assign(W.data, {
       client: d.client || "", repo: d.repoUrl || "", branch: d.branch || "main", port: d.port ? String(d.port) : "",
-      health: d.healthPath || "", size: d.size || "small",
+      health: d.healthPath || "", size: d.size || "tiny",
     });
     W.envNames = Array.isArray(d.env) ? d.env : [];
     W.data.env = W.envNames.length ? W.envNames.map((k) => ({ k, v: "" })) : [{ k: "", v: "" }];
@@ -1539,7 +1572,7 @@
       h("div", { class: "review" },
         section("Name & address", 0, [["Name", d.name], ["Client", d.client || "None"]]),
         section("Source", 1, [["Repo", d.repo.replace(/^https:\/\/github\.com\//, "")], ["Branch", d.branch || "main"], ["Token", d.pat ? "New token provided" : (W.mode === "edit" ? "Keep the saved token" : "Missing")]]),
-        section("Runtime", 2, [["Port", d.port || "8080"], ["Health", d.health || "/"], ["Size", (d.size || "small") + (size ? " · " + size.spec : "")]]),
+        section("Runtime", 2, [["Port", d.port || "8080"], ["Health", d.health || "/"], ["Size", (d.size || "tiny") + (size ? " · " + size.spec : "")]]),
         section("Environment", 3, [["Variables", env.length ? env.map((r) => r.k).join(", ") : "None"]])),
       busyNow ? h("div", { class: "alert alert-info mt-16" }, icon("i-info"), h("div", { class: "alert-body", text: "This demo is " + (STATUS_LABEL[W.origStatus] || W.origStatus).toLowerCase() + " right now. Save, then redeploy once it settles." })) : null,
       h("div", { class: "wiz-foot" },
@@ -1669,12 +1702,12 @@
   const FAQ = [
     ["The key email didn't arrive.", "It usually takes under a minute. Check spam or junk, and that you used your plain @" + EMAIL_DOMAIN + " address (no + aliases). You can ask for a new key once a minute."],
     ["Why isn't my demo on the dashboard?", "The dashboard lists your demos that aren't destroyed (admins see everyone's). If one is missing, refresh, or open it by name at the bottom of the Demos page."],
-    ["The build failed. What now?", "Open the demo and check Logs and the status report. The usual suspects: no Dockerfile at the root, the wrong port, or a health path that needs a login."],
+    ["The build failed. What now?", "Open the demo and check the Build log tab: it shows the clone and docker build output. If the build passed but the app never got healthy, check App logs and the status report. The usual suspects: no Dockerfile at the root, the wrong port, or a health path that needs a login. Logs are kept 7 days."],
     ["How long does a demo live?", "30 days. You get a warning email on day 27. Extend moves the expiry to 30 days from now, up to 90 days in total."],
     ["Can I change settings after deploying?", "Yes: Edit settings, save, then Redeploy. The client part of the address is fixed after the first deploy; destroy and set up again to change it."],
     ["Can I put secrets in environment variables?", "No. Platform operators can read them. Use test credentials only."],
     ["How many demos can I run?", "Five active demos per person (25 for admins). Destroy one to free a slot. Demos an admin made permanent don't count."],
-    ["Who can open or manage my demo?", "Anyone with the link can open the app itself, so add your own login if it needs one. Only you and Lilypad admins can see its status and logs, extend it or destroy it."],
+    ["Who can open or manage my demo?", "Anyone with the link can open the app itself, so add your own login if it needs one. Only you and Lilypad admins can see its status, app logs and build log, extend it or destroy it."],
     ["Where is my key kept?", "In this browser's local storage. Sign out removes it. Requesting a new key replaces the old one everywhere."],
     ["Keyboard shortcuts?", "/ search · n new demo · r refresh · ? help · Esc closes panels and menus."],
   ];
@@ -1793,7 +1826,7 @@
             S.me ? h("div", { class: "id-card" }, h("span", { class: "avatar", text: initials(S.me.email) }),
               h("div", null, h("strong", { text: S.me.email }), " ", adminTag(), h("div", { class: "hint", text: exp ? "Key expires " + fmtDate(exp) + " (" + fmtRel(exp) + ")" : "Key verified" })))
               : h("p", { class: "hint", text: "Key not verified yet." }),
-            isAdmin() ? h("p", { class: "hint", text: "As an admin you see every demo, and can view logs, extend and destroy any of them. Deploying and editing stay with each demo's creator." }) : null,
+            isAdmin() ? h("p", { class: "hint", text: "As an admin you see every demo, and can view app and build logs, extend and destroy any of them. Deploying and editing stay with each demo's creator." }) : null,
             h("div", { class: "row" }, btn("Get a new key", { icon: "i-key", href: "#/welcome?step=email" }), btn("Sign out", { cls: "btn-danger", icon: "i-logout", onclick: signOut }))),
           setRow("Platform URL", S.cfg.apiUrl ? "Provided by this site. Change it only if your admin asks you to." : "From your Lilypad admin.",
             h("div", { class: "row" }, h("div", { class: "grow" }, url), saveUrl))),

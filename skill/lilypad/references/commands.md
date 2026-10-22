@@ -12,7 +12,8 @@
 | `lilypad setup --sample` | Prints a documented sample conf file (`> demoproject.conf`). Local only. | Local |
 | `lilypad redeploy <name>` | Rebuilds latest commit, rolls service, applies `setup` edits. Async. | Creator |
 | `lilypad status <name>` | State, URL, owner, commit, size, expiry, task counts, settled flag. | Creator or admin |
-| `lilypad logs <name> [lines]` | Container logs. Default 50, max 500. | Creator or admin |
+| `lilypad logs <name> [lines]` | The running app's container logs. Default 50, max 500. | Creator or admin |
+| `lilypad build-logs <name> [lines]` | The latest build's log (running, succeeded or failed) and its status. Default 50, max 500. | Creator or admin |
 | `lilypad extend <name>` | Expiry = now + 30 days; 90-day lifetime cap. Async. | Creator or admin |
 | `lilypad destroy <name>` | Deletes stack and images. Irreversible. Async. Refused (409) for a pinned demo. | Creator or admin |
 | `lilypad pin <name>` / `lilypad unpin <name>` | Permanent: no expiry, not destroyable, not counted toward cap; redeploy keeps it. `unpin` = back to 30 days. RUNNING only. Async. | Admin |

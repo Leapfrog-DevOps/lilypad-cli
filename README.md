@@ -61,7 +61,7 @@ One `KEY=VALUE` per line; `#` starts a comment; values may be quoted. The keys a
 | `BRANCH` | `--branch` | Default `main`. |
 | `PORT` | `--port` | Default `8080`. |
 | `HEALTH` | `--health` | Default `/`. |
-| `SIZE` | `--size` | Default `small`. |
+| `SIZE` | `--size` | Default `tiny`. |
 | `ENV_FILE` | `--env-file` | A relative path is relative to the conf file. Leave it out to clear the demo's env vars. |
 
 - A command-line option beats the same key in the file, and `<name>` beats `NAME`: `lilypad setup --conf demoproject.conf --size tiny`.
@@ -76,8 +76,8 @@ One `KEY=VALUE` per line; `#` starts a comment; values may be quoted. The keys a
 [`web/`](web/) is a browser version of the CLI: `index.html` plus `assets/` (CSS, JS, logo), no build step and no dependencies. Use the hosted copy (the demo named `lilypad`; ask your Lilypad admin for the address). The platform only accepts browser requests from that address, so a local copy works only against the mock server.
 
 - **Onboarding**: connect to the platform (skipped when the site provides the URL), email yourself a key, paste it.
-- **Demos**: cards with live status, build progress, expiry and actions (open, logs, deploy, redeploy, extend, edit, destroy). Search, client filter, auto-refresh (5 minutes by default; 10s to 10m, or off).
-- **Demo panel**: overview with health and stage, live-tail logs, settings, danger zone.
+- **Demos**: cards with live status, build progress, expiry and actions (open, app logs, build log, deploy, redeploy, extend, edit, destroy). Search, client filter, auto-refresh (5 minutes by default; 10s to 10m, or off).
+- **Demo panel**: overview with health and stage, live-tail app logs, the latest build log (running or finished), settings, danger zone.
 - **New demo / Edit settings**: a five-step wizard (name, source, runtime, environment, review) that saves, waits for the repo check, then deploys. Env values are never returned by the platform, so re-enter them when editing. The GitHub PAT is sent once and never stored.
 - **Help** (guide, FAQ, raw JSON requests like `lilypad -`) and **Settings** (account, platform URL, theme, auto-refresh).
 

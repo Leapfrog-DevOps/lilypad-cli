@@ -1,6 +1,6 @@
 ---
 name: lilypad
-description: Deploy and manage disposable demos on the Lilypad self-serve demo platform with the installed `lilypad` CLI. Use when the user wants to turn a GitHub repo into a live demo, or to authenticate, set up, create, redeploy, check status, read logs, extend, list or destroy a Lilypad demo, or mentions Lilypad, an `lpk_` key, or `lilypad` commands.
+description: Deploy and manage disposable demos on the Lilypad self-serve demo platform with the installed `lilypad` CLI. Use when the user wants to turn a GitHub repo into a live demo, or to authenticate, set up, create, redeploy, check status, read app or build logs, extend, list or destroy a Lilypad demo, or mentions Lilypad, an `lpk_` key, or `lilypad` commands.
 ---
 
 # Lilypad
@@ -73,7 +73,7 @@ lilypad whoami
 2. `lilypad status <name> | jq -r .data.lastMessage` should say "Repo readable, Dockerfile found". If token or Dockerfile error, fix and rerun `setup`.
 3. `lilypad create <name>` (alias `deploy`). Async. Then poll `lilypad status <name> | jq -r .message` about once a minute. BUILDING 3-5 min, DEPLOYING 2-5 min, then RUNNING with `Settled: yes`. Give the user the URL.
 4. Changes: edit the conf file (or repeat all `setup` options) and rerun `setup`, then `lilypad redeploy <name>`.
-5. Other: `lilypad logs <name> [lines]` (default 50, max 500), `lilypad extend <name>` (now + 30 days, 90-day lifetime cap), `lilypad list [--client C]`, `lilypad destroy <name>`, admin-only `lilypad pin|unpin <name>` (permanent: no expiry, not destroyable).
+5. Other: `lilypad logs <name> [lines]` (the running app's container logs) and `lilypad build-logs <name> [lines]` (the latest build: clone, docker build, push; running or finished), both default 50, max 500, kept 7 days; `lilypad extend <name>` (now + 30 days, 90-day lifetime cap), `lilypad list [--client C]`, `lilypad destroy <name>`, admin-only `lilypad pin|unpin <name>` (permanent: no expiry, not destroyable).
 
 Name rule: `^[a-z][a-z0-9-]{1,22}[a-z0-9]$` (3-24 chars). Reserved: www, api, admin, app, mail, status, help, test, core, dns.
 Client rule (optional): `^[a-z0-9]([a-z0-9-]{0,18}[a-z0-9])?$` (1-20 chars). Commands still take the name, not `name-client`.
@@ -84,7 +84,7 @@ Defaults: branch `main`, port `8080`, health `/` (must return 200-399 without lo
 
 - **Confirm before `destroy`** (irreversible), before `redeploy` on someone's live demo, and before `create`/`redeploy` of a name the user has not named explicitly.
 - `create`, `redeploy`, `extend`, `destroy` are async: reply "accepted" only. Verify with `status`. Do not claim success until `status` shows RUNNING / DESTROYED and `Settled: yes`.
-- Only the creator may `setup` (existing), `create`, `redeploy`. Creator or admin may `status`, `logs`, `extend`, `destroy`. Max 5 active demos per person (25 for admins).
+- Only the creator may `setup` (existing), `create`, `redeploy`. Creator or admin may `status`, `logs`, `build-logs`, `extend`, `destroy`. Max 5 active demos per person (25 for admins).
 - Env vars via `--env-file` are visible to the platform operators: no real secrets. 
 - Platform adds no auth to demos. App's own job.
 - Email arrives once per create/redeploy outcome and a reminder 3 days before expiry.

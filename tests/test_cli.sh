@@ -56,6 +56,9 @@ for c in create redeploy status extend destroy; do
 done
 "$cli" deploy demo1 >/dev/null; [ "$(last | jq -r .body.action)" = create ] || bad deploy-alias
 "$cli" logs demo1 100 >/dev/null; [ "$(last | jq -r .body.args.lines)" = 100 ] || bad logs
+"$cli" build-logs demo1 100 >/dev/null
+[ "$(last | jq -r .body.action)/$(last | jq -r .body.args.lines)" = build-logs/100 ] || bad build-logs
+"$cli" build-logs demo1 >/dev/null; [ "$(last | jq -r '.body.args // "none"')" = none ] || bad build-logs-default
 ok "simple commands"
 [ "$("$cli" --version)" = "lilypad 1.0.2" ] || bad version
 ok "--version"

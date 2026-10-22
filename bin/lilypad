@@ -14,7 +14,8 @@
 #                                             save config (GitHub PAT from $GITHUB_PAT or a hidden prompt)
 #   lilypad setup --sample                    print a sample conf file: lilypad setup --sample > demoproject.conf
 #   lilypad create|redeploy|status|extend|destroy <name>   (deploy = create)
-#   lilypad logs <name> [lines]               default 50, max 500
+#   lilypad logs <name> [lines]               app (container) logs; default 50, max 500
+#   lilypad build-logs <name> [lines]         latest build log, running or finished; default 50, max 500
 #   lilypad pin|unpin <name>                  admins: make permanent (no expiry, not destroyable), or undo
 #   lilypad '<json>' | lilypad -            raw JSON body (JSON as an argument, or on stdin)
 #   lilypad <command> --help                  what a command does and the options it takes
@@ -25,7 +26,7 @@ set -euo pipefail
 VERSION="1.0.2"
 
 usage() {
-  sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//' >&2
+  sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//' >&2
   exit 2
 }
 
@@ -70,7 +71,7 @@ Demos are deleted after 30 days.
    Name (the project): 3-24 chars, lowercase letters, digits, hyphens, starts with a letter.
    Client (optional): 1-20 chars, lowercase letters, digits, hyphens. The address becomes
    <name>-<client> (shop-acme) and every resource is tagged Client=acme. Fixed once deployed.
-   Size: tiny, small (default), medium (large is admin-only).
+   Size: tiny (default), small, medium (large is admin-only).
    Then check it: lilypad status acme-poc   # expect "Repo readable, Dockerfile found"
 
 6. Deploy
@@ -84,7 +85,8 @@ Demos are deleted after 30 days.
 
 8. When it fails or misbehaves
       lilypad status acme-poc | jq -r .message
-      lilypad logs acme-poc 200
+      lilypad build-logs acme-poc 200   # the build: clone, docker build, push
+      lilypad logs acme-poc 200         # the running app
    Check that --port matches the container and --health returns 200-399 without a login.
 
 9. Lifecycle
@@ -125,7 +127,7 @@ PORT=8080
 HEALTH=/
 
 # tiny | small | medium | large (large is admin-only)
-SIZE=small
+SIZE=tiny
 
 # Optional file of KEY=VALUE environment variables for the demo itself (no real secrets).
 # A relative path is relative to this file. Leave it out to clear the demo's env vars.
@@ -270,7 +272,7 @@ Options:
   --branch <name>     branch to build. Default: main
   --port <n>          port your container listens on, 1 to 65535. Default: 8080
   --health <path>     path that returns 200 to 399 without a login. Default: /
-  --size <size>       tiny 256/512, small 512/1024 (default), medium 1024/2048,
+  --size <size>       tiny 256/512 (default), small 512/1024, medium 1024/2048,
                       large 2048/4096 (CPU units / MiB). large is admin-only.
   --env-file <file>   KEY=VALUE per line, keys match [A-Z_][A-Z0-9_]*. Visible to anyone with
                       the platform operators, so no real secrets. Omit to clear.
@@ -327,7 +329,19 @@ EOT
     logs) cat <<'EOT'
 lilypad logs <name> [lines]
 
-Print the latest container log lines. Creator or admin.
+Print the latest log lines of the running app (its container). Build output is
+build-logs. Creator or admin.
+
+  <name>    the demo name
+  [lines]   how many lines. Default: 50, max: 500
+EOT
+      ;;
+    build-logs) cat <<'EOT'
+lilypad build-logs <name> [lines]
+
+Print the latest build's log (clone, docker build, push), whether it is still running,
+succeeded or failed, plus its status and times. App output is logs. Creator or admin.
+Logs are kept 7 days.
 
   <name>    the demo name
   [lines]   how many lines. Default: 50, max: 500
@@ -481,11 +495,11 @@ case "$action" in
     need_jq
     body="$(jq -nc --arg a "$action" --arg n "$1" '{action: $a, name: $n}')"
     ;;
-  logs)
+  logs | build-logs)
     [ $# -ge 1 ] && [ $# -le 2 ] || usage
     need_jq
-    body="$(jq -nc --arg n "$1" --arg l "${2:-}" \
-      '{action: "logs", name: $n} + (if $l == "" then {} else {args: {lines: $l}} end)')"
+    body="$(jq -nc --arg a "$action" --arg n "$1" --arg l "${2:-}" \
+      '{action: $a, name: $n} + (if $l == "" then {} else {args: {lines: $l}} end)')"
     ;;
   setup)
     [ $# -ge 1 ] || usage
