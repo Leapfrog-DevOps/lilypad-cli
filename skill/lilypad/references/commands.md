@@ -7,7 +7,7 @@
 | `lilypad logout` | Deletes saved key. Local only. | Local |
 | `lilypad whoami` | Your email, key expiry, and whether you are an admin. | Any valid key |
 | `lilypad list [--client C]` | Demos not yet destroyed (set up, building, live, failed) with client, owner, status and expiry; optionally one client's. | Any valid key |
-| `lilypad setup [<name>] [--conf FILE] [--repo <url>] [opts]` | Saves demo config. No deploy. Rerun replaces whole config. | Anyone for new/destroyed name (fresh record, PAT required, creator too); creator after |
+| `lilypad setup [<name>] [--conf FILE] [--repo <url>] [opts]` | Saves demo config. No deploy. Rerun replaces whole config. | Anyone for new/destroyed name (fresh record, GitHub access required, creator too); creator after |
 | `lilypad create <name>` (alias `deploy`) | Builds repo, creates stack. Async. | Creator |
 | `lilypad setup --sample` | Prints a documented sample conf file (`> demoproject.conf`). Local only. | Local |
 | `lilypad redeploy <name>` | Rebuilds latest commit, rolls service, applies `setup` edits. Async. | Creator |
@@ -32,12 +32,13 @@ Read just the text of a reply: `lilypad status <name> | jq -r .message`. Structu
 | `--branch <name>` | `main` | |
 | `--port <n>` | `8080` | 1-65535 |
 | `--health <path>` | `/` | Must return 200-399 with no login |
-| `--size <s>` | `small` | tiny, small, medium, large (admin only) |
+| `--size <s>` | `tiny` | tiny, small, medium, large (admin only) |
 | `--env-file <file>` | none | `KEY=VALUE` per line, keys `[A-Z_][A-Z0-9_]*`. Omit to clear. |
+| `--notes <text>` | keep stored | Free-text notes, up to 1000 chars, `\n` for a line break. Omit to keep; `--notes ""` clears. Full in `status` (`data.notes`), 40-char preview in `list`. Not for secrets. |
 
-Conf file: `lilypad setup --conf demoproject.conf`. `.env` style, one `KEY=VALUE` per line, `#` comments, quotes allowed. Keys: `NAME`, `REPO`, `CLIENT`, `BRANCH`, `PORT`, `HEALTH`, `SIZE`, `ENV_FILE` (same as the options; relative `ENV_FILE` is relative to the conf file). Options on the command line override the file; `<name>` overrides `NAME`. Parsed as text, never run; unknown or repeated keys are errors with the line number. The PAT is not a conf key.
+Conf file: `lilypad setup --conf demoproject.conf`. `.env` style, one `KEY=VALUE` per line, `#` comments, quotes allowed. Keys: `NAME`, `REPO`, `CLIENT`, `BRANCH`, `PORT`, `HEALTH`, `SIZE`, `ENV_FILE`, `NOTES` (same as the options; relative `ENV_FILE` is relative to the conf file). Options on the command line override the file; `<name>` overrides `NAME`. Parsed as text, never run; unknown or repeated keys are errors with the line number. GitHub access is not a conf key.
 
-PAT: `$GITHUB_PAT` or hidden prompt (TTY only). Never an option.
+GitHub access: `$GITHUB_AUTH` (alias `$GITHUB_PAT`) or hidden prompt (TTY only). Never an option. Value is one of: `public`; a deploy key private-key file path (CLI sends the file text; `.pub` refused; no passphrase); a fine-grained PAT. Raw JSON takes the same in `githubPat` (key text, any newline layout). `status` data shows `githubAuth`: `pat`, `deploy-key` or `public`.
 
 ## Raw JSON API
 
@@ -58,7 +59,7 @@ Setup `args` keys: `repoUrl`, `branch`, `port`, `healthPath`, `size`, `env` (fil
 | `LILYPAD_URL` | Platform URL (overrides the saved one) |
 | `LILYPAD_EMAIL_DOMAIN` | Allowed email domain for `auth` |
 | `LILYPAD_CONFIG_DIR` | PowerShell CLI: config directory (default `%APPDATA%\lilypad`) |
-| `GITHUB_PAT` | PAT for `setup` |
+| `GITHUB_AUTH` | GitHub access for `setup`: PAT, deploy key file path, or `public` (`GITHUB_PAT` is an alias) |
 | `XDG_CONFIG_HOME` | Moves key and URL files (default `~/.config`) |
 
 ## Lifecycle

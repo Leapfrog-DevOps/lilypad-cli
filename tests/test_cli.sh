@@ -5,6 +5,7 @@ here="$(cd "$(dirname "$0")/.." && pwd)"
 work="$(mktemp -d)"
 trap 'kill "$srv" 2>/dev/null || true; rm -rf "$work"' EXIT
 export HOME="$work/home" XDG_CONFIG_HOME="$work/home/.config"
+unset GITHUB_AUTH GITHUB_PAT
 mkdir -p "$HOME"
 python3 "$here/tests/mock_server.py" "$work/port" "$work/log" &
 srv=$!
@@ -60,7 +61,7 @@ done
 [ "$(last | jq -r .body.action)/$(last | jq -r .body.args.lines)" = build-logs/100 ] || bad build-logs
 "$cli" build-logs demo1 >/dev/null; [ "$(last | jq -r '.body.args // "none"')" = none ] || bad build-logs-default
 ok "simple commands"
-[ "$("$cli" --version)" = "lilypad 1.0.2" ] || bad version
+[ "$("$cli" --version)" = "lilypad 1.1.0" ] || bad version
 ok "--version"
 
 printf 'FOO=bar\n' >"$work/app.env"
@@ -74,6 +75,26 @@ GITHUB_PAT=github_pat_x "$cli" setup demo1 --repo https://github.com/o/r >/dev/n
 GITHUB_PAT=github_pat_x "$cli" setup demo1 --repo https://github.com/o/r --client acme >/dev/null </dev/null
 [ "$(last | jq -r .body.args.client)" = acme ] || bad setup-client
 ok "setup and list send client only when given"
+
+GITHUB_AUTH=public "$cli" setup demo1 --repo https://github.com/o/r >/dev/null </dev/null
+[ "$(last | jq -r .body.args.githubPat)" = public ] || bad "GITHUB_AUTH=public"
+ok "GITHUB_AUTH=public sends public"
+GITHUB_AUTH=github_pat_a GITHUB_PAT=github_pat_b "$cli" setup demo1 --repo https://github.com/o/r >/dev/null </dev/null
+[ "$(last | jq -r .body.args.githubPat)" = github_pat_a ] || bad "GITHUB_AUTH must win over GITHUB_PAT"
+ok "GITHUB_AUTH wins over GITHUB_PAT; GITHUB_PAT still works alone (above)"
+mkdir -p "$HOME/.ssh"
+ssh-keygen -q -t ed25519 -N "" -C test -f "$HOME/.ssh/lp_test" >/dev/null
+GITHUB_AUTH="$HOME/.ssh/lp_test" "$cli" setup demo1 --repo https://github.com/o/r >/dev/null </dev/null
+[ "$(last | jq -r .body.args.githubPat)" = "$(cat "$HOME/.ssh/lp_test")" ] || bad "deploy key file contents not sent"
+# shellcheck disable=SC2088  # the literal ~/ is the point: the CLI must expand it
+GITHUB_AUTH="~/.ssh/lp_test" "$cli" setup demo1 --repo https://github.com/o/r >/dev/null </dev/null
+[ "$(last | jq -r .body.args.githubPat)" = "$(cat "$HOME/.ssh/lp_test")" ] || bad "~/ not expanded"
+ok "GITHUB_AUTH=<key file> (and ~/key file) sends the private key text"
+n_before="$(wc -l <"$work/log" | tr -d ' ')"
+out="$(GITHUB_AUTH="$HOME/.ssh/lp_test.pub" "$cli" setup demo1 --repo https://github.com/o/r 2>&1 </dev/null)" && bad ".pub accepted"
+grep -q "is not a private key (use the deploy key file without .pub)" <<<"$out" || bad "wrong .pub message: $out"
+[ "$(wc -l <"$work/log" | tr -d ' ')" = "$n_before" ] || bad ".pub sent a request"
+ok "GITHUB_AUTH=<file.pub> dies before sending"
 
 echo '{"action":"list"}' | "$cli" - >/dev/null; [ "$(last | jq -r .body.action)" = list ] || bad raw-stdin
 ok "raw JSON via stdin"
@@ -127,7 +148,9 @@ conf_err() { # conf_err <expected text> <conf content>
 }
 conf_err "bad.conf:2: unknown key COLOR" 'NAME=a\nCOLOR=red\n'
 conf_err "bad.conf:2: REPO is set twice" 'REPO=a\nREPO=b\n'
-conf_err "GitHub PAT cannot be set in a conf file" 'GITHUB_PAT=github_pat_zzz\n'
+conf_err "GitHub access cannot be set in a conf file" 'GITHUB_PAT=github_pat_zzz\n'
+conf_err "bad.conf:1: GitHub access cannot be set in a conf file" 'GITHUB_AUTH=public\n'
+conf_err "GitHub access cannot be set in a conf file" 'DEPLOY_KEY=/tmp/k\n'
 conf_err "bad.conf:1: expected KEY=VALUE" 'just words\n'
 conf_err "missing closing quote" 'NAME="abc\n'
 conf_err "setup needs --repo" 'NAME=abc\n'
@@ -146,5 +169,31 @@ cmp -s "$work/sample.out" "$here/demoproject.sample.conf" || bad "--sample diffe
 GITHUB_PAT=x "$cli" setup --conf "$work/sample.out" >/dev/null 2>&1 </dev/null || bad "the sample conf is not accepted as is"
 [ "$(last | jq -r .body.name)" = acme-poc ] || bad "sample name"
 ok "--sample prints the sample, and the sample is a valid conf"
+
+# --- setup notes ----------------------------------------------------------------------
+GITHUB_PAT=x "$cli" setup demo1 --repo https://github.com/o/r >/dev/null </dev/null
+[ "$(last | jq -r '.body.args | has("notes")')" = false ] || bad "notes sent when not given"
+ok "setup without notes sends no notes key (server keeps the stored ones)"
+GITHUB_PAT=x "$cli" setup demo1 --repo https://github.com/o/r --notes 'a\nb' >/dev/null </dev/null
+[ "$(last | jq -r .body.args.notes)" = "$(printf 'a\nb')" ] || bad "--notes \\n not a newline: $(last)"
+ok "--notes 'a\\nb' sends a real line break"
+GITHUB_PAT=x "$cli" setup demo1 --repo https://github.com/o/r --notes '' >/dev/null </dev/null
+[ "$(last | jq -c '.body.args.notes')" = '""' ] || bad "--notes '' must send an empty string: $(last)"
+ok "--notes '' sends notes \"\" (clears)"
+printf 'NAME=notedemo\nREPO=https://github.com/o/r\nNOTES="Acme pilot\\nDay 2"\n' >"$work/notes.conf"
+GITHUB_PAT=x "$cli" setup --conf "$work/notes.conf" >/dev/null </dev/null
+[ "$(last | jq -r .body.args.notes)" = "$(printf 'Acme pilot\nDay 2')" ] || bad "conf NOTES not sent: $(last)"
+ok "conf NOTES is sent"
+GITHUB_PAT=x "$cli" setup --conf "$work/notes.conf" --notes other >/dev/null </dev/null
+[ "$(last | jq -r .body.args.notes)" = other ] || bad "--notes must beat NOTES: $(last)"
+GITHUB_PAT=x "$cli" setup --conf "$work/notes.conf" --notes '' >/dev/null </dev/null
+[ "$(last | jq -c .body.args.notes)" = '""' ] || bad "--notes '' must beat NOTES: $(last)"
+printf 'NAME=notedemo\nREPO=https://github.com/o/r\nNOTES=""\n' >"$work/notes-empty.conf"
+GITHUB_PAT=x "$cli" setup --conf "$work/notes-empty.conf" >/dev/null </dev/null
+[ "$(last | jq -c .body.args.notes)" = '""' ] || bad "NOTES=\"\" must send an empty string: $(last)"
+ok "--notes beats NOTES; NOTES=\"\" clears"
+sed -n "/^function Sample/,/^'@/p" "$here/bin/lilypad.ps1" | sed '1,2d;$d' >"$work/ps-sample.out"
+cmp -s "$work/ps-sample.out" "$here/demoproject.sample.conf" || bad "PowerShell sample differs from demoproject.sample.conf"
+ok "PowerShell sample matches demoproject.sample.conf"
 
 echo "all $pass passed"

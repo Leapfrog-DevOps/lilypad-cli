@@ -2,17 +2,18 @@
 # Lilypad CLI for Windows PowerShell 5.1 and PowerShell 7+. Same commands as the bash CLI.
 #   lilypad auth <email> | login <key> | logout | whoami
 #   lilypad list [--client C]
-#   lilypad setup [<name>] [--conf FILE] [--repo <url>] [--client C] [--branch B] [--port N] [--health /p] [--size S] [--env-file F]
+#   lilypad setup [<name>] [--conf FILE] [--repo <url>] [--client C] [--branch B] [--port N] [--health /p] [--size S] [--env-file F] [--notes T]
+#     GitHub access from $env:GITHUB_AUTH or a hidden prompt: a PAT, a deploy key file path, or "public"
 #   lilypad setup --sample > demoproject.conf   (a documented sample conf file)
 #   lilypad create|redeploy|status|extend|destroy|pin|unpin <name> | logs|build-logs <name> [lines]   (pin/unpin: admins; logs = app, build-logs = build)
 #   lilypad config url <URL> | update | '<json>' | - | --how-to
 # Key: $env:LILYPAD_KEY, else %APPDATA%\lilypad\key. URL: $env:LILYPAD_URL, else %APPDATA%\lilypad\url.
 $ErrorActionPreference = 'Stop'
-$Version = '1.0.2'
+$Version = '1.1.0'
 
 function Die([string]$msg) { [Console]::Error.WriteLine("lilypad: $msg"); exit 1 }
 function Usage {
-  Get-Content $PSCommandPath | Select-Object -Skip 1 -First 8 | ForEach-Object { [Console]::Error.WriteLine(($_ -replace '^# ?', '')) }
+  Get-Content $PSCommandPath | Select-Object -Skip 1 -First 9 | ForEach-Object { [Console]::Error.WriteLine(($_ -replace '^# ?', '')) }
   exit 2
 }
 
@@ -47,10 +48,16 @@ Demos are deleted after 30 days.
      add an open /health route.
    - No real secrets in env vars: operators can see them. Auth is the app's own job.
 
-4. Create a GitHub token for the repo
-   Fine-grained PAT, read-only "Contents" on that one repo. Give it to the CLI via the
-   environment or the hidden prompt, never as an option:
-      $env:GITHUB_PAT = 'github_pat_...'
+4. Give Lilypad read access to the repo (one of three)
+   - Public repo: nothing to create. Use the word public.
+   - Deploy key: ssh-keygen -t ed25519 -f $HOME\.ssh\lilypad_shop (press Enter twice: no passphrase),
+     add lilypad_shop.pub under the repo's Settings > Deploy keys (read-only), and pass the
+     private key file's path.
+   - Fine-grained PAT: read-only "Contents" on that one repo.
+   Give it to the CLI via the environment or the hidden prompt, never as an option:
+      $env:GITHUB_AUTH = 'public'                    (or)
+      $env:GITHUB_AUTH = "$HOME\.ssh\lilypad_shop"   (or)
+      $env:GITHUB_AUTH = 'github_pat_...'
 
 5. Save the demo's configuration (nothing is deployed yet)
    Easiest: keep the settings in a conf file.
@@ -60,7 +67,7 @@ Demos are deleted after 30 days.
    Or give everything as options (these override the file):
       lilypad setup shop --client acme --repo https://github.com/<org>/<repo>  `
         --port 3000 --health /health --size small [--branch main] [--env-file app.env]
-   The GitHub PAT is never read from the conf file (step 4).
+   GitHub access is never read from the conf file (step 4).
    Name (the project): 3-24 chars, lowercase letters, digits, hyphens, starts with a letter.
    Client (optional): 1-20 chars, lowercase letters, digits, hyphens. The address becomes
    <name>-<client> (shop-acme) and every resource is tagged Client=acme. Fixed once deployed.
@@ -99,8 +106,8 @@ function Sample {
 #
 #   lilypad setup --conf demoproject.conf
 #
-# Command-line options override the same key here. The GitHub PAT is NOT set in this file:
-# export GITHUB_PAT=... or type it at the hidden prompt.
+# Command-line options override the same key here. GitHub access is NOT set in this file:
+# export GITHUB_AUTH=... (a PAT, a deploy key file path, or public) or type it at the hidden prompt.
 
 # Project name: 3-24 chars, lowercase letters, digits, hyphens; starts with a letter.
 NAME=acme-poc
@@ -124,6 +131,11 @@ SIZE=tiny
 # Optional file of KEY=VALUE environment variables for the demo itself (no real secrets).
 # A relative path is relative to this file. Leave it out to clear the demo's env vars.
 # ENV_FILE=app.env
+
+# Optional notes for your own record, up to 1000 characters: who it is for, dates, demo tips.
+# Shown in full by status, shortened in list. Kept when left out; NOTES="" clears them.
+# Write \n for a line break. Not for passwords.
+# NOTES="Acme pilot. Demo on 30 Oct\nLogin with the guest button"
 '@ | Write-Output
 }
 
@@ -158,9 +170,9 @@ function Read-Conf([string]$file) {
     }
     if ($res.ContainsKey($key)) { Die "${file}:${n}: $key is set twice" }
     switch ($key) {
-      { $_ -in 'NAME', 'REPO', 'CLIENT', 'BRANCH', 'PORT', 'HEALTH', 'SIZE', 'ENV_FILE' } { $res[$key] = $val }
-      { $_ -in 'GITHUB_PAT', 'PAT', 'GITHUB_TOKEN' } { Die "${file}:${n}: the GitHub PAT cannot be set in a conf file; use `$env:GITHUB_PAT or the hidden prompt" }
-      default { Die "${file}:${n}: unknown key $key (supported: NAME REPO CLIENT BRANCH PORT HEALTH SIZE ENV_FILE)" }
+      { $_ -in 'NAME', 'REPO', 'CLIENT', 'BRANCH', 'PORT', 'HEALTH', 'SIZE', 'ENV_FILE', 'NOTES' } { $res[$key] = $val }
+      { $_ -in 'GITHUB_AUTH', 'GITHUB_PAT', 'PAT', 'GITHUB_TOKEN', 'DEPLOY_KEY' } { Die "${file}:${n}: GitHub access cannot be set in a conf file; use `$env:GITHUB_AUTH or the hidden prompt" }
+      default { Die "${file}:${n}: unknown key $key (supported: NAME REPO CLIENT BRANCH PORT HEALTH SIZE ENV_FILE NOTES)" }
     }
   }
   return $res
@@ -253,6 +265,7 @@ switch -Regex ($action) {
     $name = ''
     $conf = ''
     $envPath = ''
+    $notes = $null   # $null = not given, so the stored notes are kept; '' clears them
     $opt = @{}
     $flag = @{}   # which options were given on the command line; they beat the conf file
     $i = 0
@@ -269,6 +282,7 @@ switch -Regex ($action) {
         '--health'   { $opt.healthPath = $v; $flag['HEALTH'] = $true }
         '--size'     { $opt.size = $v; $flag['SIZE'] = $true }
         '--env-file' { $envPath = $v; $flag['ENV_FILE'] = $true }
+        '--notes'    { $notes = [string]$v; $flag['NOTES'] = $true }
         default { Die "unknown option $($rest[$i]) (see: lilypad --help)" }
       }
       $i += 2
@@ -278,6 +292,7 @@ switch -Regex ($action) {
       if (-not $flag['NAME'] -and $c['NAME']) { $name = $c['NAME'] }
       $map = @{ REPO = 'repoUrl'; CLIENT = 'client'; BRANCH = 'branch'; PORT = 'port'; HEALTH = 'healthPath'; SIZE = 'size' }
       foreach ($k in $map.Keys) { if ($c[$k] -and -not $flag[$k]) { $opt[$map[$k]] = $c[$k] } }
+      if (-not $flag['NOTES'] -and $c.ContainsKey('NOTES')) { $notes = [string]$c['NOTES'] }
       if (-not $flag['ENV_FILE'] -and $c['ENV_FILE']) {
         $envPath = $c['ENV_FILE']
         # A relative ENV_FILE in a conf file is relative to that file.
@@ -290,14 +305,23 @@ switch -Regex ($action) {
     }
     if (-not $name) { Die 'setup needs a demo name: lilypad setup <name> ... (or NAME= in the conf file)' }
     if (-not $opt.repoUrl) { Die 'setup needs --repo https://github.com/<org>/<repo> (or REPO= in the conf file)' }
-    # The PAT never goes on the command line. Blank keeps the one already stored, except on a destroyed name.
-    $pat = $env:GITHUB_PAT
+    # GitHub access never goes on the command line: a PAT, a deploy key file path, or "public".
+    # Blank keeps the one already stored, except on a destroyed name. The server works out which it is.
+    $pat = if ($env:GITHUB_AUTH) { $env:GITHUB_AUTH } else { $env:GITHUB_PAT }
     if (-not $pat -and [Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
-      $sec = Read-Host -AsSecureString 'GitHub PAT (blank keeps the stored one; required for a destroyed name)'
+      $sec = Read-Host -AsSecureString 'GitHub access: PAT, path to a deploy key file, or public (blank keeps the stored one)'
       $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)
       try { $pat = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) } finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
     }
+    if ($pat -match '^~[\\/]') { $pat = Join-Path $HOME $pat.Substring(2) }
+    if ($pat -and (Test-Path -LiteralPath $pat -PathType Leaf)) {
+      try { $keyText = Get-Content -LiteralPath $pat -Raw } catch { Die "cannot read $pat" }
+      if (-not $keyText -or -not $keyText.Contains('PRIVATE KEY-----')) { Die "$pat is not a private key (use the deploy key file without .pub)" }
+      $pat = $keyText
+    }
     if ($pat) { $opt.githubPat = $pat }
+    # Notes are sent only when given (option or NOTES=), so leaving them out keeps the stored ones; "" clears.
+    if ($null -ne $notes) { $opt.notes = $notes.Replace('\n', "`n") }
     $body = ToJson @{ action = 'setup'; name = $name; args = $opt }; break
   }
   default { Die "unknown command '$action' (see: lilypad --help)" }

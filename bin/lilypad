@@ -11,7 +11,8 @@
 #   lilypad list [--client C]                 demos not yet destroyed, optionally one client's
 #   lilypad setup [<name>] [--conf FILE] [--repo <url>] [--client C] [--branch B] [--port N]
 #                  [--health /path] [--size tiny|small|medium|large] [--env-file FILE]
-#                                             save config (GitHub PAT from $GITHUB_PAT or a hidden prompt)
+#                                             save config (GitHub access from $GITHUB_AUTH or a hidden prompt:
+#                                             a PAT, a deploy key file path, or "public")
 #   lilypad setup --sample                    print a sample conf file: lilypad setup --sample > demoproject.conf
 #   lilypad create|redeploy|status|extend|destroy <name>   (deploy = create)
 #   lilypad logs <name> [lines]               app (container) logs; default 50, max 500
@@ -23,10 +24,10 @@
 # Key: $LILYPAD_KEY, else ~/.config/lilypad/key. URL: $LILYPAD_URL, else ~/.config/lilypad/url.
 set -euo pipefail
 
-VERSION="1.0.2"
+VERSION="1.1.0"
 
 usage() {
-  sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//' >&2
+  sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//' >&2
   exit 2
 }
 
@@ -54,10 +55,15 @@ Demos are deleted after 30 days.
      add an open /health route.
    - No real secrets in env vars: operators can see them. Auth is the app's own job.
 
-4. Create a GitHub token for the repo
-   Fine-grained PAT, read-only "Contents" on that one repo. Give it to the CLI via the
-   environment or the hidden prompt, never as an option:
-      export GITHUB_PAT=github_pat_...
+4. Give Lilypad read access to the repo (one of three)
+   - Public repo: nothing to create. Use the word public.
+   - Deploy key: ssh-keygen -t ed25519 -N "" -f ~/.ssh/lilypad_shop, add lilypad_shop.pub under
+     the repo's Settings > Deploy keys (read-only), and pass the private key file's path.
+   - Fine-grained PAT: read-only "Contents" on that one repo.
+   Give it to the CLI via the environment or the hidden prompt, never as an option:
+      export GITHUB_AUTH=public                    (or)
+      export GITHUB_AUTH=~/.ssh/lilypad_shop       (or)
+      export GITHUB_AUTH=github_pat_...
 
 5. Save the demo's configuration (nothing is deployed yet)
    Easiest: keep the settings in a conf file.
@@ -67,7 +73,7 @@ Demos are deleted after 30 days.
    Or give everything as options (these override the file):
       lilypad setup shop --client acme --repo https://github.com/<org>/<repo> \
         --port 3000 --health /health --size small [--branch main] [--env-file app.env]
-   The GitHub PAT is never read from the conf file (step 4).
+   GitHub access is never read from the conf file (step 4).
    Name (the project): 3-24 chars, lowercase letters, digits, hyphens, starts with a letter.
    Client (optional): 1-20 chars, lowercase letters, digits, hyphens. The address becomes
    <name>-<client> (shop-acme) and every resource is tagged Client=acme. Fixed once deployed.
@@ -107,8 +113,8 @@ sample_conf() {
 #
 #   lilypad setup --conf demoproject.conf
 #
-# Command-line options override the same key here. The GitHub PAT is NOT set in this file:
-# export GITHUB_PAT=... or type it at the hidden prompt.
+# Command-line options override the same key here. GitHub access is NOT set in this file:
+# export GITHUB_AUTH=... (a PAT, a deploy key file path, or public) or type it at the hidden prompt.
 
 # Project name: 3-24 chars, lowercase letters, digits, hyphens; starts with a letter.
 NAME=acme-poc
@@ -132,6 +138,11 @@ SIZE=tiny
 # Optional file of KEY=VALUE environment variables for the demo itself (no real secrets).
 # A relative path is relative to this file. Leave it out to clear the demo's env vars.
 # ENV_FILE=app.env
+
+# Optional notes for your own record, up to 1000 characters: who it is for, dates, demo tips.
+# Shown in full by status, shortened in list. Kept when left out; NOTES="" clears them.
+# Write \n for a line break. Not for passwords.
+# NOTES="Acme pilot. Demo on 30 Oct\nLogin with the guest button"
 EOT
 }
 
@@ -182,9 +193,10 @@ read_conf() { # read_conf <file>
       HEALTH) c_health="$val" ;;
       SIZE) c_size="$val" ;;
       ENV_FILE) c_env_file="$val" ;;
-      GITHUB_PAT | PAT | GITHUB_TOKEN)
-        die "$file:$n: the GitHub PAT cannot be set in a conf file; use \$GITHUB_PAT or the hidden prompt" ;;
-      *) die "$file:$n: unknown key $key (supported: NAME REPO CLIENT BRANCH PORT HEALTH SIZE ENV_FILE)" ;;
+      NOTES) c_notes="$val" ;;
+      GITHUB_AUTH | GITHUB_PAT | PAT | GITHUB_TOKEN | DEPLOY_KEY)
+        die "$file:$n: GitHub access cannot be set in a conf file; use \$GITHUB_AUTH or the hidden prompt" ;;
+      *) die "$file:$n: unknown key $key (supported: NAME REPO CLIENT BRANCH PORT HEALTH SIZE ENV_FILE NOTES)" ;;
     esac
   done <"$file"
 }
@@ -258,7 +270,7 @@ lilypad setup --sample
 Save a demo's configuration. Nothing is deployed: run `lilypad create <name>` afterwards.
 The repo and Dockerfile are checked in the background; poll `lilypad status <name>` for the result.
 Rerunning setup REPLACES the whole config: repeat every option you want to keep. Only the
-GitHub PAT is carried over when left blank, except on a destroyed name (fresh start).
+GitHub access is carried over when left blank, except on a destroyed name (fresh start).
 
   <name>              project name, 3 to 24 chars: lowercase letters, digits, hyphens; starts
                       with a letter. Served at https://<name>.<the platform's demo domain>
@@ -276,23 +288,33 @@ Options:
                       large 2048/4096 (CPU units / MiB). large is admin-only.
   --env-file <file>   KEY=VALUE per line, keys match [A-Z_][A-Z0-9_]*. Visible to anyone with
                       the platform operators, so no real secrets. Omit to clear.
+  --notes <text>      your own notes about the demo, up to 1000 chars (\n for a line break).
+                      Shown in full by status, shortened in list. Omit to keep the stored
+                      notes; --notes "" clears them. Visible to admins: no passwords.
 
 Conf file (--conf <file>):
   Keep the options in a .env-style file: one KEY=VALUE per line, # starts a comment, values may
-  be quoted. Keys: NAME REPO CLIENT BRANCH PORT HEALTH SIZE ENV_FILE (the options above;
+  be quoted. Keys: NAME REPO CLIENT BRANCH PORT HEALTH SIZE ENV_FILE NOTES (the options above;
   ENV_FILE is --env-file, a relative path is relative to the conf file). The file is read as
-  text, never run. Unknown or repeated keys are errors. The GitHub PAT is NOT a conf key.
+  text, never run. Unknown or repeated keys are errors. GitHub access is NOT a conf key.
   A command-line option beats the same key in the file; <name> beats NAME.
   --sample            print a documented sample conf:  lilypad setup --sample > demoproject.conf
 
-GitHub PAT (fine-grained, read-only Contents on that one repo):
-  Set $GITHUB_PAT, or type it at the hidden prompt. It is never taken as an option, so it stays
-  out of shell history and `ps`. Required on first setup and on any setup of a destroyed name, even your own.
+GitHub access (one of three; Lilypad works out which):
+  public                      a public repo, no credential
+  <path to a private key>     a deploy key: the private half (no passphrase) of a key whose .pub is
+                              under the repo's Settings > Deploy keys. Make one with
+                              ssh-keygen -t ed25519 -N "" -f ~/.ssh/lilypad_shop
+  github_pat_...              a fine-grained PAT, read-only Contents on that one repo
+  Set $GITHUB_AUTH ($GITHUB_PAT also works), or type it at the hidden prompt. It is never taken as an
+  option, so it stays out of shell history and `ps`. Blank keeps the stored one; required on first
+  setup and on any setup of a destroyed name, even your own.
 
 Example:
-  GITHUB_PAT=github_pat_... lilypad setup shop --client acme \
+  GITHUB_AUTH=public lilypad setup shop --client acme \
     --repo https://github.com/your-org/shop --port 3000 --health /health --size tiny
-  GITHUB_PAT=github_pat_... lilypad setup --conf demoproject.conf
+  GITHUB_AUTH=~/.ssh/lilypad_shop lilypad setup --conf demoproject.conf
+  GITHUB_AUTH=github_pat_... lilypad setup --conf demoproject.conf
 EOT
       ;;
     create|deploy) cat <<'EOT'
@@ -505,7 +527,7 @@ case "$action" in
     [ $# -ge 1 ] || usage
     need_jq
     name="" conf=""
-    repo="" client="" branch="" port="" health="" size="" env_file=""
+    repo="" client="" branch="" port="" health="" size="" env_file="" notes=""
     o_seen=" "
     case "$1" in -*) ;; *) name="$1"; o_seen=" name "; shift ;; esac
     while [ $# -gt 0 ]; do
@@ -519,12 +541,13 @@ case "$action" in
         --health) health="$2"; o_seen="$o_seen""health " ;;
         --size) size="$2"; o_seen="$o_seen""size " ;;
         --env-file) env_file="$2"; o_seen="$o_seen""env_file " ;;
+        --notes) notes="$2"; o_seen="$o_seen""notes " ;;
         *) die "unknown option $1 (see: lilypad --help)" ;;
       esac
       shift 2
     done
     if [ -n "$conf" ]; then
-      c_name="" c_repo="" c_client="" c_branch="" c_port="" c_health="" c_size="" c_env_file="" c_seen=" "
+      c_name="" c_repo="" c_client="" c_branch="" c_port="" c_health="" c_size="" c_env_file="" c_notes="" c_seen=" "
       read_conf "$conf"
       # Command-line options beat the file.
       case "$o_seen" in *" name "*) ;; *) name="$c_name" ;; esac
@@ -534,6 +557,7 @@ case "$action" in
       case "$o_seen" in *" port "*) ;; *) port="$c_port" ;; esac
       case "$o_seen" in *" health "*) ;; *) health="$c_health" ;; esac
       case "$o_seen" in *" size "*) ;; *) size="$c_size" ;; esac
+      case "$o_seen$c_seen" in *" notes "*) ;; *" NOTES "*) notes="$c_notes"; o_seen="$o_seen""notes " ;; esac
       case "$o_seen" in
         *" env_file "*) ;;
         *)
@@ -551,18 +575,30 @@ case "$action" in
       [ -r "$env_file" ] || die "cannot read $env_file"
       env_text="$(cat "$env_file")"
     fi
-    # The PAT never goes on the command line (shell history, ps). Blank keeps the one already stored, except on a destroyed name.
-    pat="${GITHUB_PAT:-}"
+    # GitHub access never goes on the command line (shell history, ps): a PAT, a deploy key file path, or
+    # "public". Blank keeps the one already stored, except on a destroyed name. The server works out which it is.
+    pat="${GITHUB_AUTH:-${GITHUB_PAT:-}}"
     if [ -z "$pat" ] && [ -t 0 ]; then
-      read -r -s -p "GitHub PAT (blank keeps the stored one; required for a destroyed name): " pat
+      read -r -s -p "GitHub access: PAT, path to a deploy key file, or public (blank keeps the stored one): " pat
       echo >&2
     fi
+    # shellcheck disable=SC2088  # matching a literal ~/ that the shell did not expand
+    case "$pat" in "~/"*) pat="$HOME/${pat#"~/"}" ;; esac
+    if [ -n "$pat" ] && [ -f "$pat" ]; then
+      [ -r "$pat" ] || die "cannot read $pat"
+      grep -q "PRIVATE KEY-----" "$pat" || die "$pat is not a private key (use the deploy key file without .pub)"
+      pat="$(cat "$pat")"
+    fi
+    # Notes are sent only when given (option or NOTES=), so leaving them out keeps the stored ones; "" clears.
+    case "$o_seen" in *" notes "*) has_notes=true ;; *) has_notes=false ;; esac
+    notes="${notes//\\n/$'\n'}"
     body="$(jq -nc --arg name "$name" --arg repo "$repo" --arg client "$client" --arg branch "$branch" \
-      --arg port "$port" --arg health "$health" --arg size "$size" --arg env "$env_text" --arg pat "$pat" '
+      --arg port "$port" --arg health "$health" --arg size "$size" --arg env "$env_text" --arg pat "$pat" \
+      --arg notes "$notes" --argjson has_notes "$has_notes" '
       {action: "setup", name: $name, args:
-        ({repoUrl: $repo, client: $client, branch: $branch, port: $port, healthPath: $health, size: $size,
-          env: $env, githubPat: $pat}
-         | with_entries(select(.value != "")))}')"
+        (({repoUrl: $repo, client: $client, branch: $branch, port: $port, healthPath: $health, size: $size,
+           env: $env, githubPat: $pat}
+          | with_entries(select(.value != ""))) + (if $has_notes then {notes: $notes} else {} end))}')"
     ;;
   *) die "unknown command '$action' (see: lilypad --help)" ;;
 esac

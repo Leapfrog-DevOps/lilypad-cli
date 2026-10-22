@@ -4,7 +4,7 @@
   Talks to the platform exactly like the CLI: POST a JSON body to the platform URL with the access
   key in X-Lilypad-Key; replies are {ok, message, data, errors}. Everything rendered from the
   platform goes through textContent (never innerHTML). The platform URL and key are kept in
-  localStorage; the GitHub PAT is sent once and never stored.
+  localStorage; the GitHub access value (token, deploy key or "public") is sent once and never stored.
 
   Views (hash routes): #/welcome (onboarding), #/demos, #/demo/<name>?tab=overview|logs|build|settings
   (detail drawer over the dashboard), #/new, #/edit/<name>, #/help (also public, no key needed), #/settings.
@@ -323,10 +323,19 @@
   // ---------------------------------------------------------------------------------------------
   // Demo data
   // ---------------------------------------------------------------------------------------------
+  // Notes are free text from the demo's creator: always rendered with textContent, never as HTML.
+  const MAX_NOTES = 1000;
+  // Same as the server's list preview: one line, at most `limit` characters, an ellipsis when cut.
+  function notesPreview(notes, limit) {
+    limit = limit || 40;
+    const flat = String(notes || "").split(/\s+/).filter(Boolean).join(" ");
+    return flat.length <= limit ? flat : flat.slice(0, limit - 1).trimEnd() + "\u2026";
+  }
   function rowFromStatus(d) {
     return {
       name: d.name, client: d.client || "", status: d.status, owner: d.ownerEmail || "", url: d.url || "",
       expiresAt: d.expiresAt || "", permanent: !!d.permanent, settled: d.settled, stage: d.stage || "", full: d,
+      notes: notesPreview(d.notes),
     };
   }
   function category(d) {
@@ -353,6 +362,7 @@
       const keep = prev && prev.status === row.status;
       next.set(row.name, {
         name: row.name, client: row.client || "", status: row.status, owner: row.owner || "", url: row.url || "", expiresAt: row.expiresAt || "",
+        notes: typeof row.notes === "string" ? row.notes : "",
         permanent: !!row.permanent, settled: keep ? prev.settled : undefined, stage: keep ? prev.stage : "", full: keep ? prev.full : null,
       });
     }
@@ -914,6 +924,7 @@
       h("div", { class: "demo-url" }, icon("i-globe", "icon-s"),
         url ? h("a", { href: url, target: "_blank", rel: "noopener noreferrer", text: url.replace(/^https:\/\//, "") }) : h("span", { class: "none", text: "No address yet" }),
         url ? h("button", { class: "iconbtn", type: "button", "aria-label": "Copy link", title: "Copy link", onclick: (e) => { e.stopPropagation(); copy(url, "Link copied"); } }, icon("i-copy", "icon-s")) : null),
+      d.notes ? h("div", { class: "demo-notes", title: d.notes, text: d.notes }) : null,
       lifecycleTrack(d),
       stage ? h("div", { class: "stage-line" }, cat === "busy" ? icon("i-refresh", "icon-s spin") : icon(cat === "fail" ? "i-alert" : "i-info", "icon-s"), h("span", { text: stage })) : null,
       d.status === "RUNNING" ? expiryBlock(d) : null,
@@ -1111,6 +1122,7 @@
       ["First live", d.firstLiveAt ? fmtDateTime(d.firstLiveAt) : ""],
       ["Last deploy", d.deployedAt ? fmtDateTime(d.deployedAt) + " (" + fmtRel(d.deployedAt) + ")" : ""],
     ])));
+    if (d.notes) body.append(h("h3", { class: "sub-h", text: "Notes" }), h("div", { class: "notes-full", text: d.notes }));
     if (D.r.message) body.append(h("h3", { class: "sub-h", text: "Status report" }), h("pre", { class: "msg-pre", text: D.r.message.replace(/\*/g, "") }));
   }
   function cleanVerdict(m) {
@@ -1274,7 +1286,7 @@
   // ---------------------------------------------------------------------------------------------
   const WSTEPS = [
     { t: "Name & address", d: "Where the demo lives" },
-    { t: "Source", d: "GitHub repo and token" },
+    { t: "Source", d: "GitHub repo and access" },
     { t: "Runtime", d: "Port, health check, size" },
     { t: "Environment", d: "Variables for your app" },
     { t: "Review", d: "Save and deploy" },
@@ -1286,8 +1298,8 @@
     S.wiz = {
       mode: editName ? "edit" : "new",
       step: 0, max: editName ? WSTEPS.length - 1 : 0,
-      data: { name: editName || (NAME_RE.test(pre) ? pre : ""), client: "", repo: "", branch: "main", pat: "", port: "", health: "", size: "tiny", env: [{ k: "", v: "" }] },
-      envNames: [], origStatus: "", errors: {}, progress: null, loading: !!editName, loadError: "",
+      data: { name: editName || (NAME_RE.test(pre) ? pre : ""), client: "", repo: "", branch: "main", pat: "", port: "", health: "", size: "tiny", env: [{ k: "", v: "" }], notes: "" },
+      envNames: [], origStatus: "", origAuth: "", origNotes: "", keyFile: "", errors: {}, progress: null, loading: !!editName, loadError: "",
     };
     add(main, [
       h("a", { class: "back", href: editName ? "#/demo/" + encodeURIComponent(editName) + "?tab=settings" : "#/demos" }, icon("i-left", "icon-s"), editName ? "Back to " + editName : "Back to demos"),
@@ -1315,10 +1327,12 @@
     if (!r.ok || !r.data) { W.loadError = errText(r); renderWiz(); return; }
     const d = r.data;
     W.origStatus = d.status;
+    W.origAuth = d.githubAuth || "";
     Object.assign(W.data, {
       client: d.client || "", repo: d.repoUrl || "", branch: d.branch || "main", port: d.port ? String(d.port) : "",
-      health: d.healthPath || "", size: d.size || "tiny",
+      health: d.healthPath || "", size: d.size || "tiny", notes: typeof d.notes === "string" ? d.notes : "",
     });
+    W.origNotes = W.data.notes;
     W.envNames = Array.isArray(d.env) ? d.env : [];
     W.data.env = W.envNames.length ? W.envNames.map((k) => ({ k, v: "" })) : [{ k: "", v: "" }];
     renderWiz();
@@ -1399,10 +1413,16 @@
       if (!NAME_RE.test(d.name)) e.name = "3–24 characters: lowercase letters, digits and hyphens. Start with a letter, end with a letter or digit.";
       else if (RESERVED.has(d.name)) e.name = "“" + d.name + "” is reserved. Pick another name.";
       if (d.client && !CLIENT_RE.test(d.client)) e.client = "1–20 characters: lowercase letters, digits and hyphens.";
+      if (d.notes.length > MAX_NOTES) e.notes = "At most " + MAX_NOTES + " characters (now " + d.notes.length + ").";
     } else if (i === 1) {
       if (!REPO_RE.test(d.repo)) e.repo = "Use the repo's address: https://github.com/<org>/<repo>";
       if (d.branch && !BRANCH_RE.test(d.branch)) e.branch = "That isn't a valid branch name.";
-      if (W.mode === "new" && !d.pat) e.pat = "A token is needed the first time, so Lilypad can read the repo.";
+      if (accessRequired() && !d.pat) {
+        e.pat = W.mode === "new" ? "GitHub access is needed the first time, so Lilypad can read the repo."
+          : "This demo was destroyed, so GitHub access is needed again.";
+      } else if (/^(ssh-[a-z0-9]+|ecdsa-sha2-\S+|sk-\S+)\s+AAAA/.test(d.pat) || d.pat.includes("PUBLIC KEY-----")) {
+        e.pat = "That's the public key. Use the private key (the file without .pub).";
+      }
     } else if (i === 2) {
       if (d.port && !(/^\d+$/.test(d.port) && +d.port >= 1 && +d.port <= 65535)) e.port = "A port between 1 and 65535.";
       if (d.health && !/^\/\S*$/.test(d.health)) e.health = "A path starting with /, for example /health.";
@@ -1437,23 +1457,70 @@
     const prev = urlPreview("Your demo will be at");
     name.addEventListener("input", () => { name.value = name.value.toLowerCase(); d.name = name.value.trim(); prev.paint(); });
     client.addEventListener("input", () => { client.value = client.value.toLowerCase(); d.client = client.value.trim(); prev.paint(); });
+    const notes = h("textarea", { class: "textarea notes-input", id: "notes", "data-k": "notes", value: d.notes, maxlength: String(MAX_NOTES), rows: "3",
+      placeholder: "Acme pilot. Demo on 30 Oct.\nLog in with the guest button." });
+    const counter = h("span", { class: "char-count", "aria-live": "polite" });
+    const count = () => { counter.textContent = notes.value.length + " / " + MAX_NOTES; counter.classList.toggle("near", notes.value.length > MAX_NOTES * 0.9); };
+    count();
+    notes.addEventListener("input", () => { notes.removeAttribute("aria-invalid"); count(); });
     add(panel, [
       h("h2", { text: "Name your demo" }),
       h("p", { class: "lead", text: "The name becomes the web address. Pick something short your client will recognise." }),
       h("div", { class: "form-grid" },
         field("name", "Demo name", name, { hint: W.mode === "edit" ? "The name can't change. Destroy and set up again to rename." : "3–24 characters: lowercase letters, digits, hyphens." }),
-        field("client", "Client", client, { opt: true, hint: "Adds -client to the address and tags the demo. Fixed after the first deploy." })),
+        field("client", "Client", client, { opt: true, hint: "Adds -client to the address and tags the demo. Fixed after the first deploy." }),
+        field("notes", "Notes", notes, { opt: true, span: true, wrap: (el) => h("div", { class: "notes-wrap" }, el, counter),
+          hint: "For your own record: who it is for, dates, demo tips. Shown to you and admins. Not for passwords." })),
       prev.el,
     ]);
   }
 
+  // GitHub access is one field: a fine-grained PAT, a deploy key's private key, or the word "public".
+  // The server works out which (and rebuilds a key whose newlines a password field dropped).
+  const AUTH_LABEL = { public: "Public", "deploy-key": "Deploy key", pat: "Token" };
+  function accessKind(v) {
+    v = (v || "").trim();
+    if (v.toLowerCase() === "public") return "public";
+    return v.includes("PRIVATE KEY-----") ? "deploy-key" : "pat";
+  }
+  function accessRequired() {
+    const W = S.wiz;
+    return W.mode === "new" || W.origStatus === "DESTROYED";
+  }
+
   function wizSource(panel) {
     const W = S.wiz, d = W.data;
+    const keep = !accessRequired();
     const repo = inp("repo", d.repo, { placeholder: "https://github.com/your-org/your-repo", type: "url" });
     const branch = inp("branch", d.branch, { placeholder: "main" });
-    const pat = inp("pat", d.pat, { type: "password", placeholder: W.mode === "edit" ? "Leave blank to keep the saved token" : "github_pat_…" });
-    const eye = h("button", { class: "btn btn-icon", type: "button", "aria-label": "Show token" }, icon("i-eye"));
-    eye.addEventListener("click", () => { const s = pat.type === "password"; pat.type = s ? "text" : "password"; eye.setAttribute("aria-label", s ? "Hide token" : "Show token"); clear(eye).append(icon(s ? "i-eye-off" : "i-eye")); });
+    const pat = inp("pat", d.pat, { type: "password", placeholder: keep ? "Leave blank to keep the saved one" : "public, github_pat_…, or a private key" });
+    pat.addEventListener("input", () => { W.keyFile = ""; });
+    const eye = h("button", { class: "btn btn-icon", type: "button", "aria-label": "Show value" }, icon("i-eye"));
+    eye.addEventListener("click", () => { const s = pat.type === "password"; pat.type = s ? "text" : "password"; eye.setAttribute("aria-label", s ? "Hide value" : "Show value"); clear(eye).append(icon(s ? "i-eye-off" : "i-eye")); });
+    // Load a deploy key's private key from a file. The text goes into the field only; it is never logged.
+    const picker = h("input", { type: "file", hidden: true, "aria-hidden": "true", tabindex: "-1" });
+    const loadKey = btn("Load key file", { cls: "btn-sm", icon: "i-file", aria: "Load a deploy key's private key from a file" });
+    loadKey.addEventListener("click", () => picker.click());
+    picker.addEventListener("change", () => {
+      const f = picker.files && picker.files[0];
+      picker.value = "";
+      if (!f) return;
+      const fail = (msg) => { collect(); W.keyFile = ""; W.errors = Object.assign({}, W.errors, { pat: msg }); renderWiz(); };
+      if (f.size > 16384) { fail(f.name + " is too large to be a private key."); return; }
+      const rd = new FileReader();
+      rd.onerror = () => fail("Couldn't read " + f.name + ".");
+      rd.onload = () => {
+        const text = String(rd.result || "");
+        if (!text.includes("PRIVATE KEY-----")) { fail(f.name + " is not a private key. Use the deploy key file without .pub."); return; }
+        collect();
+        d.pat = text.trim();
+        W.keyFile = f.name;
+        delete W.errors.pat;
+        renderWiz();
+      };
+      rd.readAsText(f);
+    });
+    const saved = W.mode === "edit" && keep && W.origAuth ? " Saved now: " + (AUTH_LABEL[W.origAuth] || W.origAuth) + "." : "";
     add(panel, [
       h("h2", { text: "Where's the code?" }),
       h("p", { class: "lead", text: "Lilypad builds the Dockerfile at the root of this repo and branch." }),
@@ -1461,13 +1528,17 @@
         field("repo", "GitHub repository", repo, { span: true, hint: "The repo needs a Dockerfile at its root." }),
         field("branch", "Branch", branch, { hint: "Default: main" }),
         h("div"),
-        field("pat", "GitHub access token", pat, {
-          span: true, opt: W.mode === "edit", wrap: (i) => h("div", { class: "input-group" }, i, eye),
-          hint: h("span", null, "A fine-grained token with read-only ", h("b", { text: "Contents" }), " access to this one repo. ",
-            h("a", { href: "https://github.com/settings/personal-access-tokens/new", target: "_blank", rel: "noopener noreferrer", text: "Create one on GitHub" }),
-            W.mode === "edit" ? ". Leave blank to keep the saved one." : "."),
+        field("pat", "GitHub access", pat, {
+          span: true, opt: keep, wrap: (i) => h("div", null, h("div", { class: "input-group" }, i, eye),
+            h("div", { class: "mt-8" }, loadKey, picker, W.keyFile && accessKind(d.pat) === "deploy-key" ? h("span", { class: "hint", text: " Loaded from " + W.keyFile + "." }) : null)),
+          hint: h("span", null, "One of three; Lilypad works out which. ",
+            h("b", { text: "Public repo:" }), " type ", h("code", { text: "public" }), ". ",
+            h("b", { text: "Deploy key:" }), " the private key (no passphrase; ed25519 recommended) whose .pub is under the repo's Settings › Deploy keys, read-only. Paste it or load the file. ",
+            h("b", { text: "Token:" }), " a fine-grained token with read-only ", h("b", { text: "Contents" }), " on this one repo (",
+            h("a", { href: "https://github.com/settings/personal-access-tokens/new", target: "_blank", rel: "noopener noreferrer", text: "create one on GitHub" }), ").",
+            keep ? " Leave blank to keep the saved one." + saved : ""),
         })),
-      h("div", { class: "alert alert-info mt-24" }, icon("i-lock"), h("div", { class: "alert-body", text: "The token is sent once and kept by the platform so it can rebuild on redeploy. This browser never stores it, and it's never shown back." })),
+      h("div", { class: "alert alert-info mt-24" }, icon("i-lock"), h("div", { class: "alert-body", text: "A token or key is sent once and kept by the platform so it can rebuild on redeploy. This browser never stores it, and it's never shown back." })),
     ]);
   }
 
@@ -1570,8 +1641,10 @@
       h("p", { class: "lead", text: "Check everything, then save. You can deploy now or later." }),
       prev.el,
       h("div", { class: "review" },
-        section("Name & address", 0, [["Name", d.name], ["Client", d.client || "None"]]),
-        section("Source", 1, [["Repo", d.repo.replace(/^https:\/\/github\.com\//, "")], ["Branch", d.branch || "main"], ["Token", d.pat ? "New token provided" : (W.mode === "edit" ? "Keep the saved token" : "Missing")]]),
+        section("Name & address", 0, [["Name", d.name], ["Client", d.client || "None"],
+          ["Notes", d.notes ? h("span", { class: "notes-full", text: d.notes.length > 300 ? d.notes.slice(0, 299).trimEnd() + "\u2026" : d.notes })
+            : W.mode === "edit" && W.origNotes ? "None (cleared)" : "None"]]),
+        section("Source", 1, [["Repo", d.repo.replace(/^https:\/\/github\.com\//, "")], ["Branch", d.branch || "main"], ["Access", d.pat ? AUTH_LABEL[accessKind(d.pat)] + " (new)" : (!accessRequired() ? "Keep the saved one" + (W.origAuth ? " (" + (AUTH_LABEL[W.origAuth] || W.origAuth) + ")" : "") : "Missing")]]),
         section("Runtime", 2, [["Port", d.port || "8080"], ["Health", d.health || "/"], ["Size", (d.size || "tiny") + (size ? " · " + size.spec : "")]]),
         section("Environment", 3, [["Variables", env.length ? env.map((r) => r.k).join(", ") : "None"]])),
       busyNow ? h("div", { class: "alert alert-info mt-16" }, icon("i-info"), h("div", { class: "alert-body", text: "This demo is " + (STATUS_LABEL[W.origStatus] || W.origStatus).toLowerCase() + " right now. Save, then redeploy once it settles." })) : null,
@@ -1588,6 +1661,8 @@
     const env = d.env.filter((r) => r.k).map((r) => r.k + "=" + r.v).join("\n");
     const args = { repoUrl: d.repo, client: d.client, branch: d.branch, port: d.port, healthPath: d.health, size: d.size, env, githubPat: d.pat };
     for (const k of Object.keys(args)) if (args[k] === "") delete args[k]; // like the CLI: blanks are left out
+    // Notes are sent only when they change: a missing key keeps the stored notes, "" clears them.
+    if (S.wiz.mode === "new" ? d.notes !== "" : d.notes !== S.wiz.origNotes) args.notes = d.notes;
     return args;
   }
 
@@ -1610,7 +1685,7 @@
     // A status call stores the status text as lastMessage, so an older setup verdict can't be mistaken for this one.
     await api({ action: "status", name });
     const r = await api({ action: "setup", name, args: setupArgs() });
-    W.data.pat = "";
+    W.data.pat = ""; W.keyFile = "";
     if (!r.ok) { W.progress.failed = true; set("save", "err", errText(r)); return; }
     track(name);
     set("save", "ok", "Saved.");
@@ -1693,8 +1768,8 @@
   ];
   const DEPLOY_STEPS = [
     ["Prepare the repo", "A Dockerfile at the repo root. The app listens on one port (8080 by default) and has a path that answers 200 without a login."],
-    ["Create a GitHub token", "A fine-grained personal access token with read-only Contents access to that one repo."],
-    ["Set up the demo", "New demo: pick a name, paste the repo and token, choose port, health path and size."],
+    ["Give Lilypad read access", "One of three. Public repo: nothing to create, type public. Deploy key: run ssh-keygen -t ed25519 -N \"\" -f ~/.ssh/lilypad_<name>, add the .pub under the repo's Settings › Deploy keys (read-only, leave \"Allow write access\" off), and load the private key file. Or a fine-grained token with read-only Contents on that one repo."],
+    ["Set up the demo", "New demo: pick a name, paste the repo and its GitHub access, choose port, health path and size."],
     ["Deploy", "Save & deploy. It takes 5–10 minutes. You get an email when it's live, or if it fails."],
     ["Share and iterate", "Send the link. Push new code, then Redeploy. Change settings with Edit settings, then Redeploy."],
     ["Clean up", "Demos expire after 30 days, with a warning on day 27. Extend adds 30 days, up to 90 in total. Destroy when you're done."],

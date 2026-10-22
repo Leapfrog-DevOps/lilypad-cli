@@ -31,10 +31,10 @@ Never guess a missing value. For every input the user must supply, ask one quest
 | Branch | `main` | type branch |
 | Port | `8080` | type 1-65535 |
 | Health path | `/` | type path |
-| Size | `small` | tiny / medium / large (admin only) |
+| Size | `tiny` | small / medium / large (admin only) |
 | Env file | none | type file path |
 | Log lines | `50` | type 1-500 |
-| GitHub PAT | "`GITHUB_PAT` was exported before launch (Recommended)" | "PAT is on my clipboard" (run via `pbpaste`); "I will run setup myself". Only these three options are listed. Question text adds: "Or type the PAT under Other (not recommended: it stays in the transcript)". Typing under Other is the manual input. |
+| GitHub access | "Public repo (no credential)" if the repo is public, else "Deploy key file (Recommended)" | "`GITHUB_AUTH`/`GITHUB_PAT` was exported before launch"; "PAT is on my clipboard" (run via `pbpaste`); "I will run setup myself". Only list options that fit. Question text adds: "Or type a PAT under Other (not recommended: it stays in the transcript)". Typing under Other is the manual input. |
 | Confirm destroy / redeploy | "Cancel" | "Yes, proceed" |
 
 Ask for the destructive confirmation with the safe option as the default. Ask once per workflow, not once per command.
@@ -49,19 +49,22 @@ lilypad whoami
 
 - After `auth` succeeds, tell the user: the key arrives within a minute from "Lilypad", subject "Your Lilypad access key". **Check the spam/junk folder too** if it is not in the inbox. If still missing after a few minutes, wait out the 1-minute limit and run `auth` again (the newest key replaces the older one).
 - The user must read the key from the email and give it to you (or run `login` themselves). Never invent or guess one.
-- Never print, echo, log or repeat the key or any PAT back. Pass keys through env or the saved file, never as part of a visible message.
+- Never print, echo, log or repeat the key, any PAT or any private key back. Never `cat` a deploy key file. Pass keys through env or the saved file, never as part of a visible message.
 - `auth` replaces any earlier key at once. 1 request per email per minute.
 - The CLI rejects any address that is not a plain `@lftechnology.com` one (other domains, `+` aliases, subdomains) before contacting the platform. Check the address yourself first and ask the user for their company email instead of trying a personal one.
 
 ## Deploy workflow
 
-1. `lilypad setup <name> --repo https://github.com/<org>/<repo> [--client C] [--branch B] [--port N] [--health /path] [--size tiny|small|medium|large] [--env-file FILE]`
-   - **Conf file**: with several options, offer to write them to a `demoproject.conf` (`.env` style: `NAME REPO CLIENT BRANCH PORT HEALTH SIZE ENV_FILE`; `lilypad setup --sample` prints a template) and run `lilypad setup --conf demoproject.conf`. Command-line options override the file. **Never put the PAT or any secret in it**: it is not a conf key and the CLI rejects it.
-   - Saves config only. Rerunning **replaces the whole config**: repeat every option to keep it. Omitting `--env-file` clears env vars. Omitting `--client` keeps the stored client; the client is fixed once deployed (destroy and set up again to change it).
-   - **GitHub PAT**: fine-grained, read-only Contents on that one repo. Read from `$GITHUB_PAT` or a hidden prompt, never an option. Needed on first setup and on any setup of a destroyed name, even your own. Blank on rerun of a live demo keeps the stored one.
-   - A prompt cannot run in an agent shell, and env set in one Bash call does not persist to the next. Do not ask the user to paste a PAT into chat, and never put a literal PAT in a command (it lands in the transcript). Ways to supply it:
-     1. User exports `GITHUB_PAT` in their terminal, then launches Claude Code from that shell. Check with `[ -n "${GITHUB_PAT:-}" ] && echo set`, never print it.
-     2. User copies the PAT to the clipboard and runs `! GITHUB_PAT=$(pbpaste) lilypad setup <name> --repo ...` (macOS; `xclip -o` / `wl-paste` on Linux).
+1. `lilypad setup <name> --repo https://github.com/<org>/<repo> [--client C] [--branch B] [--port N] [--health /path] [--size tiny|small|medium|large] [--env-file FILE] [--notes TEXT]`
+   - **Conf file**: with several options, offer to write them to a `demoproject.conf` (`.env` style: `NAME REPO CLIENT BRANCH PORT HEALTH SIZE ENV_FILE NOTES`; `lilypad setup --sample` prints a template) and run `lilypad setup --conf demoproject.conf`. Command-line options override the file. **Never put GitHub access or any secret in it**: it is not a conf key and the CLI rejects it.
+   - Saves config only. Rerunning **replaces the whole config**: repeat every option to keep it. Omitting `--env-file` clears env vars. Omitting `--notes` keeps the stored notes (`--notes ""` clears; up to 1000 chars, no secrets). Omitting `--client` keeps the stored client; the client is fixed once deployed (destroy and set up again to change it).
+   - **GitHub access**, one of three; the platform works out which. Read from `$GITHUB_AUTH` (alias `$GITHUB_PAT`) or a hidden prompt, never an option. Needed on first setup and on any setup of a destroyed name, even your own. Blank on rerun of a live demo keeps the stored one; a new value switches kind. `status` shows the kind as `githubAuth`.
+     - `public`: public repo, no credential. Not a secret: `GITHUB_AUTH=public lilypad setup ...` is fine in a command.
+     - **Deploy key** (private repos, preferred for agents): a key file path is not a secret, so `GITHUB_AUTH=~/.ssh/lilypad_<name> lilypad setup ...` is fine in a command. The CLI reads the file. To make one: `ssh-keygen -t ed25519 -N "" -f ~/.ssh/lilypad_<name>`, then the user adds the `.pub` (safe to show) under the repo's Settings > Deploy keys with write access off. No passphrase. Never read or print the private file.
+     - **PAT**: fine-grained, read-only Contents on that one repo.
+   - A prompt cannot run in an agent shell, and env set in one Bash call does not persist to the next. Do not ask the user to paste a PAT or private key into chat, and never put a literal one in a command (it lands in the transcript). Ways to supply a PAT:
+     1. User exports `GITHUB_AUTH` (or `GITHUB_PAT`) in their terminal, then launches Claude Code from that shell. Check with `[ -n "${GITHUB_AUTH:-${GITHUB_PAT:-}}" ] && echo set`, never print it.
+     2. User copies the PAT to the clipboard and runs `! GITHUB_AUTH=$(pbpaste) lilypad setup <name> --repo ...` (macOS; `xclip -o` / `wl-paste` on Linux).
      3. **Paste in chat (not recommended).** Not a listed option: it is the manual input (Other) of the PAT question, and the question text says it is not recommended because the PAT stays in the transcript. If the user types a PAT there (or in chat), send it only through a stdin heredoc, never as an argument or env prefix (visible in `ps`):
         ```bash
         lilypad - <<'EOF'
@@ -70,7 +73,7 @@ lilypad whoami
         ```
         Add the other `setup` args (client, branch, port, healthPath, size) to the same JSON; for env vars, merge file text with `jq -c --rawfile env FILE '.args.env=$env' <<'EOF' | lilypad -`. Never repeat the PAT in later messages or files. Afterwards tell the user to revoke the token if the transcript is shared.
      4. Claude.ai has no user shell, so typing the PAT in chat is the only way there: say it is not recommended first, and suggest running `setup` locally instead.
-2. `lilypad status <name> | jq -r .data.lastMessage` should say "Repo readable, Dockerfile found". If token or Dockerfile error, fix and rerun `setup`.
+2. `lilypad status <name> | jq -r .data.lastMessage` should say "Repo readable, Dockerfile found" (a deploy key says "Deploy key saved…": it is checked when the build clones). If token, "not public" or Dockerfile error, fix and rerun `setup`.
 3. `lilypad create <name>` (alias `deploy`). Async. Then poll `lilypad status <name> | jq -r .message` about once a minute. BUILDING 3-5 min, DEPLOYING 2-5 min, then RUNNING with `Settled: yes`. Give the user the URL.
 4. Changes: edit the conf file (or repeat all `setup` options) and rerun `setup`, then `lilypad redeploy <name>`.
 5. Other: `lilypad logs <name> [lines]` (the running app's container logs) and `lilypad build-logs <name> [lines]` (the latest build: clone, docker build, push; running or finished), both default 50, max 500, kept 7 days; `lilypad extend <name>` (now + 30 days, 90-day lifetime cap), `lilypad list [--client C]`, `lilypad destroy <name>`, admin-only `lilypad pin|unpin <name>` (permanent: no expiry, not destroyable).
