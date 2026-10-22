@@ -39,4 +39,6 @@ jobs:
           Set-Content -Path "$env:RUNNER_TEMP/bad.conf" -Value "NAME=abc`nCOLOR=red"
           # A child pwsh: Die writes to [Console]::Error, which 2>&1 inside this session does not capture.
           $r = pwsh -NoProfile -File ./bin/lilypad.ps1 setup --conf "$env:RUNNER_TEMP/bad.conf" 2>&1 | Out-String
-          if ($r -notmatch 'unknown key COLOR') { Write-Error "unexpected: $r"; exit 1 }
+          if ($LASTEXITCODE -ne 1 -or $r -notmatch 'unknown key COLOR') { Write-Error "unexpected ($LASTEXITCODE): $r"; exit 1 }
+          # The runner exits the step with $LASTEXITCODE; the child's expected failure is not the step's.
+          $global:LASTEXITCODE = 0
