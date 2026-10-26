@@ -341,11 +341,14 @@
     const flat = String(notes || "").split(/\s+/).filter(Boolean).join(" ");
     return flat.length <= limit ? flat : flat.slice(0, limit - 1).trimEnd() + "\u2026";
   }
+  const money = (n) => "$" + Number(n).toFixed(2);
+  // Estimated dollars a month while the demo has a live stack; null before it first went live (platform estimate).
+  const monthlyOf = (cost) => (cost && cost.billing && typeof cost.monthly === "number" ? cost.monthly : null);
   function rowFromStatus(d) {
     return {
       name: d.name, client: d.client || "", status: d.status, owner: d.ownerEmail || "", url: d.url || "",
       expiresAt: d.expiresAt || "", permanent: !!d.permanent, settled: d.settled, stage: d.stage || "", full: d,
-      notes: notesPreview(d.notes),
+      notes: notesPreview(d.notes), size: d.size || "", monthlyCost: monthlyOf(d.cost),
     };
   }
   function category(d) {
@@ -373,6 +376,7 @@
       next.set(row.name, {
         name: row.name, client: row.client || "", status: row.status, owner: row.owner || "", url: row.url || "", expiresAt: row.expiresAt || "",
         notes: typeof row.notes === "string" ? row.notes : "",
+        size: row.size || "", monthlyCost: typeof row.monthlyCost === "number" ? row.monthlyCost : null,
         permanent: !!row.permanent, settled: keep ? prev.settled : undefined, stage: keep ? prev.stage : "", full: keep ? prev.full : null,
       });
     }
@@ -835,8 +839,10 @@
     const grid = $("#grid");
     if (!grid) return;
     $("#demos-title").textContent = isAdmin() ? "All demos" : "Demos";
-    $("#demos-sub").textContent = isAdmin() ? "You're an admin, so you see everyone's demos." : "Live, disposable demos built from your GitHub repos.";
     const all = Array.from(S.demos.values());
+    const costs = all.map((d) => d.monthlyCost).filter((c) => typeof c === "number");
+    const total = costs.length ? " Estimated " + money(costs.reduce((a, b) => a + b, 0)) + "/month for " + costs.length + " live demo" + (costs.length === 1 ? "" : "s") + "." : "";
+    $("#demos-sub").textContent = (isAdmin() ? "You're an admin, so you see everyone's demos." : "Live, disposable demos built from your GitHub repos.") + total;
     const me = myEmail();
     const live = all.filter((d) => category(d) === "live").length;
     const busy = all.filter((d) => category(d) === "busy").length;
@@ -928,6 +934,7 @@
     if (d.client) sub.push(h("span", { class: "tag client", text: d.client }));
     if (d.permanent) sub.push(h("span", { class: "tag permanent", title: "Pinned by an admin: never expires, can't be destroyed", text: "Permanent" }));
     if (d.owner) sub.push(h("span", { text: d.owner.toLowerCase() === me ? "You" : d.owner }));
+    if (typeof d.monthlyCost === "number") sub.push(h("span", { title: "Estimated cost at list prices", text: "~" + money(d.monthlyCost) + "/mo" }));
 
     const kebab = h("button", { class: "iconbtn", type: "button", "aria-label": "More actions for " + d.name, "aria-haspopup": "menu", "aria-expanded": "false" }, icon("i-more"));
     kebab.addEventListener("click", (e) => { e.stopPropagation(); openMenu(kebab, demoMenu(d)); });
@@ -1152,6 +1159,9 @@
       ["Expires", d.permanent ? "Never (permanent)" : d.expiresAt ? fmtDate(d.expiresAt) + " · " + (n > 0 ? "in " + n + (n === 1 ? " day" : " days") : "today") + (d.extensions ? " · extended " + d.extensions + "×" : "") : ""],
       ["Owner", d.ownerEmail],
       ["Client", d.client],
+      ["Est. cost", !d.cost ? "" : d.cost.billing
+        ? "About " + money(d.cost.monthly) + "/month (" + money(d.cost.daily) + "/day) · " + money(d.cost.soFar) + " so far"
+        : "Nothing yet · about " + money(d.cost.monthly) + "/month once live"],
       ["Commit", d.commitSha ? h("code", { text: d.commitSha.slice(0, 12) }) : ""],
       ["Created", d.createdAt ? fmtDateTime(d.createdAt) : ""],
       ["First live", d.firstLiveAt ? fmtDateTime(d.firstLiveAt) : ""],
@@ -1820,6 +1830,7 @@
     ["How many demos can I run?", "Five active demos per person (25 for sales, 50 for elite and admins); ask a Lilypad admin if you need the sales or elite role. Destroy one to free a slot. Demos an admin made permanent don't count."],
     ["Who can open or manage my demo?", "Anyone with the link can open the app itself, so add your own login if it needs one. Only you and Lilypad admins can see its status, app logs and build log, deploy or redeploy it, extend it or destroy it. Only you can change its settings."],
     ["Where is my key kept?", "In this browser's local storage. Sign out removes it. Requesting a new key replaces the old one everywhere."],
+    ["What does a demo cost?", "Status and the dashboard show an estimate from the demo's size at AWS list prices, running all day: tiny is about $14 a month, large about $77. It counts from when the demo first went live, at its current size, and leaves out the shared platform. Destroy demos you no longer need."],
     ["Keyboard shortcuts?", "/ search · n new demo · r refresh · ? help · Esc closes panels and menus."],
   ];
   const helpGrid = (steps) => h("div", { class: "help-grid" }, steps.map((s, i) => h("div", { class: "card help-step" }, h("div", { class: "n", text: String(i + 1) }), h("h3", { text: s[0] }), h("p", { text: s[1] }))));

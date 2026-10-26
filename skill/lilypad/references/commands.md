@@ -6,12 +6,12 @@
 | `lilypad login <key>` | Saves key to `~/.config/lilypad/key` (mode 600). Local only. | Local |
 | `lilypad logout` | Deletes saved key. Local only. | Local |
 | `lilypad whoami` | Your email, key expiry, role (user, sales, elite, admin) and active-demo cap. | Any valid key |
-| `lilypad list [--client C]` | Demos not yet destroyed (set up, building, live, failed) with client, owner, status and expiry; optionally one client's. | Any valid key |
+| `lilypad list [--client C]` | Demos not yet destroyed (set up, building, live, failed) with client, owner, status, expiry and estimated monthly cost (`data[].monthlyCost`) plus a total; optionally one client's. | Any valid key |
 | `lilypad setup [<name>] [--conf FILE] [--repo <url>] [opts]` | Saves demo config. No deploy. Rerun replaces whole config. | Anyone for new/destroyed name (fresh record, GitHub access required, creator too); creator after |
 | `lilypad create <name>` (alias `deploy`) | Builds repo, creates stack. Async. | Creator or admin |
 | `lilypad setup --sample` | Prints a documented sample conf file (`> demoproject.conf`). Local only. | Local |
 | `lilypad redeploy <name>` | Rebuilds latest commit, rolls service, applies `setup` edits; also retries a FAILED demo (builds and creates it again). Async. | Creator or admin |
-| `lilypad status <name>` | State, URL, owner, commit, size, expiry, task counts, settled flag; a failed demo adds a `Last failure:` line (`data.lastFailure`) with the cause. | Creator or admin |
+| `lilypad status <name>` | State, URL, owner, commit, size, expiry, estimated cost (`data.cost`: monthly, daily, soFar), task counts, settled flag; a failed demo adds a `Last failure:` line (`data.lastFailure`) with the cause. | Creator or admin |
 | `lilypad logs <name> [lines]` | The running app's container logs. Default 50, max 500. | Creator or admin |
 | `lilypad build-logs <name> [lines]` | The latest build's log (running, succeeded or failed) and its status. Default 50, max 500. | Creator or admin |
 | `lilypad extend <name>` | Expiry = now + 30 days; 90-day lifetime cap. Async. | Creator or admin |

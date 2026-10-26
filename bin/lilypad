@@ -264,7 +264,8 @@ EOT
     list) cat <<'EOT'
 lilypad list [--client <client>]
 
-List your demos (admins: everyone's) that are not destroyed: set up, building, live or failed, with client, owner, status and expiry.
+List your demos (admins: everyone's) that are not destroyed: set up, building, live or failed, with client, owner, status, expiry and estimated
+monthly cost, plus the total for the live ones.
 
 Options:
   --client <client>   only that client's demos
@@ -349,8 +350,8 @@ EOT
     status) cat <<'EOT'
 lilypad status <name>
 
-Show state (BUILDING, DEPLOYING, RUNNING, ...), URL, owner, commit, size, expiry, task counts and
-whether it has settled. Read the text alone with:  lilypad status <name> | jq -r .message
+Show state (BUILDING, DEPLOYING, RUNNING, ...), URL, owner, commit, size, expiry, estimated cost
+(per month and so far, at list prices), task counts and whether it has settled. Read the text alone with:  lilypad status <name> | jq -r .message
 A failed demo shows `Last failure:` with the cause (for example failed health checks).
 Creator or admin.
 
