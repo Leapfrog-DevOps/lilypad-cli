@@ -313,7 +313,7 @@ kbd { font-size: 12px; background: var(--surface); border: 1px solid var(--line-
 
 /* ---------- demo cards ---------- */
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 16px; }
-.demo { position: relative; display: flex; flex-direction: column; padding: 18px 18px 14px; cursor: pointer; transition: box-shadow .2s var(--ease), border-color .2s, transform .2s var(--ease); }
+.demo { position: relative; min-width: 0; display: flex; flex-direction: column; padding: 18px 18px 14px; cursor: pointer; transition: box-shadow .2s var(--ease), border-color .2s, transform .2s var(--ease); }
 .demo:hover { box-shadow: var(--shadow-2); border-color: var(--line-2); transform: translateY(-1px); }
 .demo:focus-visible { box-shadow: var(--focus), var(--shadow-2); }
 .demo.menu-open { z-index: 5; }
@@ -323,16 +323,23 @@ kbd { font-size: 12px; background: var(--surface); border: 1px solid var(--line-
 .demo-mark.busy { color: var(--info); background: var(--info-soft); }
 .demo-mark.idle { color: var(--ink-3); background: var(--surface-2); }
 .demo-id { min-width: 0; flex: 1; }
-.demo-name { font-size: 16.5px; font-weight: 750; letter-spacing: -.02em; word-break: break-all; }
-.demo-sub { font-size: 12.5px; color: var(--ink-3); margin-top: 3px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.demo-name { font-size: 16.5px; font-weight: 750; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* One line, always present, so every card's header is the same height; a long owner is cut first. */
+.demo-sub { font-size: 12.5px; color: var(--ink-3); margin-top: 3px; display: flex; gap: 6px; align-items: center; min-height: 20px; min-width: 0; white-space: nowrap; overflow: hidden; }
+.demo-sub > * { flex-shrink: 0; }
+.demo-sub > .demo-owner { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .demo-url { display: flex; align-items: center; gap: 6px; margin: 14px 0 0; padding: 6px 6px 6px 10px; border-radius: 8px; background: var(--surface-2); font-size: 13px; min-width: 0; }
 .demo-url .icon { color: var(--ink-4); }
 .demo-url a { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .demo-url .none { flex: 1; color: var(--ink-4); padding: 3px 0; }
 .iconbtn { display: inline-grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 6px; background: transparent; color: var(--ink-3); cursor: pointer; flex: none; }
 .iconbtn:hover { background: var(--surface-sunk); color: var(--ink); }
-.demo-foot { display: flex; align-items: center; gap: 6px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.demo-foot { display: flex; align-items: center; gap: 6px; margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line); }
+/* Keeps the 14px gap above the footer, which sits at the bottom of a card stretched to its row. */
+.demo > :nth-last-child(2) { margin-bottom: 14px; }
 .demo-kebab { margin-left: auto; position: relative; }
+.demo-cost { margin-left: auto; font-size: 12.5px; color: var(--ink-3); white-space: nowrap; }
+.demo-cost + .demo-kebab { margin-left: 0; }
 .tag { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: 5px; font-size: 11.5px; font-weight: 650; background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--line); }
 .tag.client { background: var(--violet-soft); color: var(--violet-ink); border-color: transparent; }
 .tag.permanent { background: var(--primary-soft); color: var(--primary-soft-ink); border-color: transparent; }

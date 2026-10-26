@@ -933,8 +933,7 @@
     const sub = [];
     if (d.client) sub.push(h("span", { class: "tag client", text: d.client }));
     if (d.permanent) sub.push(h("span", { class: "tag permanent", title: "Pinned by an admin: never expires, can't be destroyed", text: "Permanent" }));
-    if (d.owner) sub.push(h("span", { text: d.owner.toLowerCase() === me ? "You" : d.owner }));
-    if (typeof d.monthlyCost === "number") sub.push(h("span", { title: "Estimated cost at list prices", text: "~" + money(d.monthlyCost) + "/mo" }));
+    if (d.owner) sub.push(h("span", { class: "demo-owner", title: d.owner, text: d.owner.toLowerCase() === me ? "You" : d.owner }));
 
     const kebab = h("button", { class: "iconbtn", type: "button", "aria-label": "More actions for " + d.name, "aria-haspopup": "menu", "aria-expanded": "false" }, icon("i-more"));
     kebab.addEventListener("click", (e) => { e.stopPropagation(); openMenu(kebab, demoMenu(d)); });
@@ -954,7 +953,7 @@
     const card = h("article", { class: "card demo", tabindex: "0", "aria-label": d.name + ", " + statusLabel(d) },
       h("div", { class: "demo-top" },
         h("div", { class: "demo-mark " + (cat === "live" ? "" : cat), text: d.name.slice(0, 2) }),
-        h("div", { class: "demo-id" }, h("div", { class: "demo-name", text: d.name }), sub.length ? h("div", { class: "demo-sub" }, sub) : null),
+        h("div", { class: "demo-id" }, h("div", { class: "demo-name", title: d.name, text: d.name }), h("div", { class: "demo-sub" }, sub)),
         h("span", { class: "pill " + cat, text: statusLabel(d) })),
       h("div", { class: "demo-url" }, icon("i-globe", "icon-s"),
         url ? h("a", { href: url, target: "_blank", rel: "noopener noreferrer", text: url.replace(/^https:\/\//, "") }) : h("span", { class: "none", text: "No address yet" }),
@@ -963,7 +962,9 @@
       lifecycleTrack(d),
       stage ? h("div", { class: "stage-line" }, cat === "busy" ? icon("i-refresh", "icon-s spin") : icon(cat === "fail" ? "i-alert" : "i-info", "icon-s"), h("span", { text: stage })) : null,
       d.status === "RUNNING" ? expiryBlock(d) : null,
-      h("div", { class: "demo-foot" }, primary, logs, h("div", { class: "demo-kebab" }, kebab)));
+      h("div", { class: "demo-foot" }, primary, logs,
+        typeof d.monthlyCost === "number" ? h("span", { class: "demo-cost", title: "Estimated cost at list prices", text: "~" + money(d.monthlyCost) + "/mo" }) : null,
+        h("div", { class: "demo-kebab" }, kebab)));
     const open = () => { S.lastFocus = card; go("demo/" + encodeURIComponent(d.name)); };
     card.addEventListener("click", (e) => { if (!e.target.closest("a,button,.menu")) open(); });
     card.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target === card) open(); });
