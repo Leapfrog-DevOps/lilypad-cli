@@ -99,6 +99,7 @@ One `KEY=VALUE` per line; `#` starts a comment; values may be quoted. The keys a
 - **Onboarding**: connect to the platform (skipped when the site provides the URL), email yourself a key, paste it.
 - **Demos**: cards with live status, build progress, expiry and actions (open, app logs, build log, deploy, redeploy, extend, edit, destroy). Search, client filter, auto-refresh (5 minutes by default; 10s to 10m, or off).
 - **Demo panel**: overview with health and stage (a failed demo shows the failure cause; a deployment with no progress for 30 minutes is flagged as stuck, with Redeploy to free it), live-tail app logs, the latest build log (running or finished), settings, danger zone.
+- **Admins** see every demo and can deploy, redeploy, extend or destroy any of them (with a confirm naming the owner, who gets a note). Editing settings stays with the creator.
 - **New demo / Edit settings**: a five-step wizard (name, source, runtime, environment, review) that saves, waits for the repo check, then deploys. Env values are never returned by the platform, so re-enter them when editing. The Source step takes GitHub access the same three ways (type `public`, paste or load a deploy key file, or paste a PAT); it is sent once, never stored in the browser, and the review shows only its kind.
 - **Help** (guide, FAQ, raw JSON requests like `lilypad -`) and **Settings** (account, platform URL, theme, auto-refresh).
 

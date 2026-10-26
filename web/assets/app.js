@@ -180,8 +180,10 @@
   const hasKey = () => !!store.get(K.key);
   const myEmail = () => (S.me && S.me.email ? S.me.email.toLowerCase() : "");
   const isAdmin = () => !!(S.me && S.me.admin);
-  // Creator-only actions (deploy, redeploy, edit) are hidden on other people's demos. Unknown owner counts as mine.
+  // Editing is creator-only and hidden on other people's demos; deploy and redeploy are open to admins too.
+  // Unknown owner counts as mine.
   const isMine = (d) => !d.owner || !myEmail() || d.owner.toLowerCase() === myEmail();
+  const canDeploy = (d) => isMine(d) || isAdmin();
   const adminTag = () => (isAdmin() ? h("span", { class: "tag admin", text: "Admin" }) : null);
 
   function demoDomain() {
@@ -452,6 +454,15 @@
             body: "It goes back to a normal 30-day lifetime from today, with the usual warning email, and can be destroyed again." });
       if (!yes) return null;
     }
+    const owner = (S.demos.get(name) || {}).owner;
+    if ((action === "create" || action === "redeploy") && isAdmin() && !isMine({ owner })) {
+      const verb = action === "create" ? "Deploy" : "Redeploy";
+      const yes = await modal({
+        title: verb + " " + name + " for " + owner + "?", confirm: verb, icon: action === "create" ? "i-rocket" : "i-redo",
+        body: "This is " + owner + "'s demo. It stays theirs and they get a note; the result comes to you.",
+      });
+      if (!yes) return null;
+    }
     busyBtn(b, true);
     const r = await api({ action, name });
     busyBtn(b, false);
@@ -526,7 +537,7 @@
         "-",
         { icon: "i-logout", label: "Sign out", danger: true, run: signOut },
       ], { head: h("div", { class: "menu-head" }, h("span", { class: "eyebrow", text: "Signed in as" }), h("strong", { text: myEmail() || "unknown" }),
-        isAdmin() ? h("span", { class: "hint", text: "Admin: you can see, extend and destroy every demo." }) : null,
+        isAdmin() ? h("span", { class: "hint", text: "Admin: you can see, deploy, redeploy, extend and destroy every demo." }) : null,
         exp ? h("span", { class: "hint", text: "Key expires " + fmtRel(exp) + " (" + fmtDate(exp) + ")" }) : null) });
     });
     return h("header", { class: "topbar" }, h("div", { class: "topbar-in" },
@@ -910,7 +921,7 @@
 
     let primary = null;
     if (d.status === "RUNNING" && url) primary = btn("Open", { cls: "btn-sm", icon: "i-external", href: url, external: true });
-    else if ((d.status === "CONFIGURED" || d.status === "FAILED") && isMine(d)) {
+    else if ((d.status === "CONFIGURED" || d.status === "FAILED") && canDeploy(d)) {
       primary = btn(d.status === "FAILED" ? "Retry deploy" : "Deploy", { cls: "btn-sm btn-primary", icon: "i-rocket" });
       primary.addEventListener("click", (e) => { e.stopPropagation(); runAction("create", d.name, primary); });
     }
@@ -945,8 +956,8 @@
       { icon: "i-info", label: "View details", run: () => go("demo/" + n) },
       { icon: "i-terminal", label: "App logs", run: () => go("demo/" + n + "?tab=logs") },
       { icon: "i-terminal", label: "Build log", run: () => go("demo/" + n + "?tab=build") },
-      (s === "CONFIGURED" || s === "FAILED") && isMine(d) ? { icon: "i-rocket", label: "Deploy", run: () => runAction("create", d.name) } : null,
-      s === "RUNNING" && isMine(d) ? { icon: "i-redo", label: "Redeploy latest commit", run: () => runAction("redeploy", d.name) } : null,
+      (s === "CONFIGURED" || s === "FAILED") && canDeploy(d) ? { icon: "i-rocket", label: "Deploy", run: () => runAction("create", d.name) } : null,
+      s === "RUNNING" && canDeploy(d) ? { icon: "i-redo", label: "Redeploy latest commit", run: () => runAction("redeploy", d.name) } : null,
       s === "RUNNING" && !d.permanent ? { icon: "i-calendar", label: "Extend 30 days", run: () => runAction("extend", d.name) } : null,
       s !== "DESTROYING" && isMine(d) ? { icon: "i-edit", label: "Edit settings", run: () => go("edit/" + n) } : null,
       s === "RUNNING" && isAdmin() ? { icon: "i-pin", label: d.permanent ? "Unpin (back to 30 days)" : "Make permanent", run: () => runAction(d.permanent ? "unpin" : "pin", d.name) } : null,
@@ -1042,10 +1053,10 @@
     if (!missing && D.r) {
       const s = d.status;
       if (s === "RUNNING" && url) acts.append(btn("Open demo", { cls: "btn-primary", icon: "i-external", href: url, external: true }));
-      const mine = isMine(d);
-      if ((s === "CONFIGURED" || s === "FAILED") && mine) { const b = btn(s === "FAILED" ? "Retry deploy" : "Deploy", { cls: "btn-primary", icon: "i-rocket" }); b.addEventListener("click", () => runAction("create", D.name, b)); acts.append(b); }
+      const mine = isMine(d), deployer = canDeploy(d);
+      if ((s === "CONFIGURED" || s === "FAILED") && deployer) { const b = btn(s === "FAILED" ? "Retry deploy" : "Deploy", { cls: "btn-primary", icon: "i-rocket" }); b.addEventListener("click", () => runAction("create", D.name, b)); acts.append(b); }
       const stuck = isStuck(Object.assign({}, D.r.data, { status: s }));
-      if ((s === "RUNNING" || stuck) && mine) { const b = btn("Redeploy", { icon: "i-redo" }); b.addEventListener("click", () => runAction("redeploy", D.name, b)); acts.append(b); }
+      if ((s === "RUNNING" || stuck) && deployer) { const b = btn("Redeploy", { icon: "i-redo" }); b.addEventListener("click", () => runAction("redeploy", D.name, b)); acts.append(b); }
       if (s === "RUNNING" && !d.permanent) { const b = btn("Extend 30 days", { icon: "i-calendar" }); b.addEventListener("click", () => runAction("extend", D.name, b)); acts.append(b); }
       if (s === "RUNNING" && isAdmin()) { const b = btn(d.permanent ? "Unpin" : "Make permanent", { icon: "i-pin" }); b.addEventListener("click", () => runAction(d.permanent ? "unpin" : "pin", D.name, b)); acts.append(b); }
       if (s !== "DESTROYING" && mine) acts.append(btn("Edit settings", { icon: "i-edit", href: "#/edit/" + encodeURIComponent(D.name) }));
@@ -1161,7 +1172,7 @@
       isMine({ owner: d.ownerEmail })
         ? h("div", { class: "row mt-16" }, btn("Edit settings", { cls: "btn-primary", icon: "i-edit", href: "#/edit/" + encodeURIComponent(D.name) }),
           h("span", { class: "hint", text: "Saving replaces the whole config. Redeploy afterwards to apply it." }))
-        : h("p", { class: "hint mt-16", text: "Only " + d.ownerEmail + " can change these settings or redeploy." }),
+        : h("p", { class: "hint mt-16", text: "Only " + d.ownerEmail + (isAdmin() ? " can change these settings." : " can change these settings or redeploy.") }),
       d.permanent
         ? h("p", { class: "hint mt-16", text: "This demo is permanent, so it can't be destroyed. An admin has to unpin it first." })
         : h("div", { class: "danger-zone" }, h("h3", { text: "Danger zone" }),
@@ -1793,7 +1804,7 @@
     ["Can I change settings after deploying?", "Yes: Edit settings, save, then Redeploy. The client part of the address is fixed after the first deploy; destroy and set up again to change it."],
     ["Can I put secrets in environment variables?", "No. Platform operators can read them. Use test credentials only."],
     ["How many demos can I run?", "Five active demos per person (25 for admins). Destroy one to free a slot. Demos an admin made permanent don't count."],
-    ["Who can open or manage my demo?", "Anyone with the link can open the app itself, so add your own login if it needs one. Only you and Lilypad admins can see its status, app logs and build log, extend it or destroy it."],
+    ["Who can open or manage my demo?", "Anyone with the link can open the app itself, so add your own login if it needs one. Only you and Lilypad admins can see its status, app logs and build log, deploy or redeploy it, extend it or destroy it. Only you can change its settings."],
     ["Where is my key kept?", "In this browser's local storage. Sign out removes it. Requesting a new key replaces the old one everywhere."],
     ["Keyboard shortcuts?", "/ search · n new demo · r refresh · ? help · Esc closes panels and menus."],
   ];
@@ -1912,7 +1923,7 @@
             S.me ? h("div", { class: "id-card" }, h("span", { class: "avatar", text: initials(S.me.email) }),
               h("div", null, h("strong", { text: S.me.email }), " ", adminTag(), h("div", { class: "hint", text: exp ? "Key expires " + fmtDate(exp) + " (" + fmtRel(exp) + ")" : "Key verified" })))
               : h("p", { class: "hint", text: "Key not verified yet." }),
-            isAdmin() ? h("p", { class: "hint", text: "As an admin you see every demo, and can view app and build logs, extend and destroy any of them. Deploying and editing stay with each demo's creator." }) : null,
+            isAdmin() ? h("p", { class: "hint", text: "As an admin you see every demo, and can view app and build logs, deploy, redeploy, extend and destroy any of them. Editing settings stays with each demo's creator, who gets a note when you deploy their demo." }) : null,
             h("div", { class: "row" }, btn("Get a new key", { icon: "i-key", href: "#/welcome?step=email" }), btn("Sign out", { cls: "btn-danger", icon: "i-logout", onclick: signOut }))),
           setRow("Platform URL", S.cfg.apiUrl ? "Provided by this site. Change it only if your admin asks you to." : "From your Lilypad admin.",
             h("div", { class: "row" }, h("div", { class: "grow" }, url), saveUrl))),

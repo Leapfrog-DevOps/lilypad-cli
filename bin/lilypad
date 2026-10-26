@@ -327,15 +327,15 @@ only says "accepted". You get one email when it is live, or one if it fails.
 
   <name>    the demo name used in setup
 
-Usually takes 5 to 10 minutes. Poll with `lilypad status <name>`. Creator only. Up to 5 active
-demos per person (25 for admins).
+Usually takes 5 to 10 minutes. Poll with `lilypad status <name>`. Creator or admin (the creator
+gets a note when an admin does it). Up to 5 active demos per person (25 for admins).
 EOT
       ;;
     redeploy) cat <<'EOT'
 lilypad redeploy <name>
 
 Rebuild the latest commit of the configured branch, roll the service, and apply config changes
-made with `setup`. Asynchronous; one email when it is updated, or one if it fails. Creator only.
+made with `setup`. Asynchronous; one email when it is updated, or one if it fails. Creator or admin.
 Also retries a FAILED demo (builds and creates it again).
 
   <name>    the demo name used in setup
