@@ -75,7 +75,7 @@ ok "status passes Last failure through (message and data.lastFailure)"
 out="$("$cli" redeploy faildemo)" || bad "redeploy on a FAILED demo exited non-zero"
 [ "$(last | jq -r .body.action)" = redeploy ] && [ "$(jq -r .ok <<<"$out")" = true ] || bad "redeploy on FAILED not accepted: $out"
 ok "redeploy on a FAILED demo is accepted"
-[ "$("$cli" --version)" = "lilypad 1.1.1" ] || bad version
+[ "$("$cli" --version)" = "lilypad 1.2.0" ] || bad version
 ok "--version"
 
 printf 'FOO=bar\n' >"$work/app.env"
