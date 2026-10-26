@@ -61,7 +61,14 @@ done
 [ "$(last | jq -r .body.action)/$(last | jq -r .body.args.lines)" = build-logs/100 ] || bad build-logs
 "$cli" build-logs demo1 >/dev/null; [ "$(last | jq -r '.body.args // "none"')" = none ] || bad build-logs-default
 ok "simple commands"
-[ "$("$cli" --version)" = "lilypad 1.1.0" ] || bad version
+out="$("$cli" status faildemo)" || bad "status on a FAILED demo exited non-zero"
+grep -q "Last failure: .*ELB health checks" <<<"$(jq -r .message <<<"$out")" || bad "status message lost Last failure: $out"
+[ "$(jq -r .data.lastFailure <<<"$out")" != null ] || bad "status data lost lastFailure: $out"
+ok "status passes Last failure through (message and data.lastFailure)"
+out="$("$cli" redeploy faildemo)" || bad "redeploy on a FAILED demo exited non-zero"
+[ "$(last | jq -r .body.action)" = redeploy ] && [ "$(jq -r .ok <<<"$out")" = true ] || bad "redeploy on FAILED not accepted: $out"
+ok "redeploy on a FAILED demo is accepted"
+[ "$("$cli" --version)" = "lilypad 1.1.1" ] || bad version
 ok "--version"
 
 printf 'FOO=bar\n' >"$work/app.env"

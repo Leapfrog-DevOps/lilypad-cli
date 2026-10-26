@@ -24,7 +24,7 @@
 # Key: $LILYPAD_KEY, else ~/.config/lilypad/key. URL: $LILYPAD_URL, else ~/.config/lilypad/url.
 set -euo pipefail
 
-VERSION="1.1.0"
+VERSION="1.1.1"
 
 usage() {
   sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//' >&2
@@ -94,6 +94,8 @@ Demos are deleted after 30 days.
       lilypad build-logs acme-poc 200   # the build: clone, docker build, push
       lilypad logs acme-poc 200         # the running app
    Check that --port matches the container and --health returns 200-399 without a login.
+   A failed demo's status has a `Last failure:` line with the cause. Fix it, then
+   lilypad redeploy acme-poc (it also retries a FAILED demo).
 
 9. Lifecycle
       lilypad list                 # your demos, any status but destroyed
@@ -334,6 +336,7 @@ lilypad redeploy <name>
 
 Rebuild the latest commit of the configured branch, roll the service, and apply config changes
 made with `setup`. Asynchronous; one email when it is updated, or one if it fails. Creator only.
+Also retries a FAILED demo (builds and creates it again).
 
   <name>    the demo name used in setup
 EOT
@@ -343,6 +346,7 @@ lilypad status <name>
 
 Show state (BUILDING, DEPLOYING, RUNNING, ...), URL, owner, commit, size, expiry, task counts and
 whether it has settled. Read the text alone with:  lilypad status <name> | jq -r .message
+A failed demo shows `Last failure:` with the cause (for example failed health checks).
 Creator or admin.
 
   <name>    the demo name
@@ -352,7 +356,7 @@ EOT
 lilypad logs <name> [lines]
 
 Print the latest log lines of the running app (its container). Build output is
-build-logs. Creator or admin.
+build-logs. After a failed deployment the first line is the failure cause. Creator or admin.
 
   <name>    the demo name
   [lines]   how many lines. Default: 50, max: 500

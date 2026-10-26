@@ -9,7 +9,7 @@
 #   lilypad config url <URL> | update | '<json>' | - | --how-to
 # Key: $env:LILYPAD_KEY, else %APPDATA%\lilypad\key. URL: $env:LILYPAD_URL, else %APPDATA%\lilypad\url.
 $ErrorActionPreference = 'Stop'
-$Version = '1.1.0'
+$Version = '1.1.1'
 
 function Die([string]$msg) { [Console]::Error.WriteLine("lilypad: $msg"); exit 1 }
 function Usage {
@@ -88,6 +88,8 @@ Demos are deleted after 30 days.
       lilypad build-logs acme-poc 200   # the build: clone, docker build, push
       lilypad logs acme-poc 200         # the running app
    Check that --port matches the container and --health returns 200-399 without a login.
+   A failed demo's status has a `Last failure:` line with the cause. Fix it, then
+   lilypad redeploy acme-poc (it also retries a FAILED demo).
 
 9. Lifecycle
       lilypad list                 # your demos, any status but destroyed

@@ -5,7 +5,8 @@
 | `HTTP 401` | No key, wrong, replaced or expired. `lilypad auth <email>`, then `lilypad login <key>`. |
 | `HTTP 400` + `errors` | Input rejected. `errors` names the field: bad email (exact `@lftechnology.com`, no `+`), bad demo name, missing GitHub access, passphrase-protected or `.pub` deploy key, bad size/port. |
 | `HTTP 403` | Name owned by someone else, or caller is not creator/admin, or `large` without admin. |
-| `HTTP 409` | Demo busy (building, deploying, destroying). Wait until `Settled: yes`, retry. |
+| `HTTP 409` | Demo busy (building, deploying, destroying). Wait until `Settled: yes`, retry. A FAILED demo is not busy: `redeploy` (or `create`) retries it. |
+| `HTTP 409` "is still being deployed" for over 30 min | Deploy looks stuck. `lilypad status <name>` frees it if its stack has already ended (it turns FAILED or RUNNING); after 30 minutes `redeploy` or `destroy` are allowed anyway. |
 | `HTTP 429` | Key mailed to that address under a minute ago. Wait, retry. |
 | `HTTP 502` on `auth` | The platform could not send the email. Previous key still works. Tell the Lilypad admins. |
 | `auth` ok but no email | Check spam/junk as well as inbox (sender "Lilypad", subject "Your Lilypad access key"). Still missing: wait 1 minute, run `auth` again. |
@@ -20,8 +21,10 @@
 | setup: `... is not a private key` / that is the public key | `GITHUB_AUTH` points at the `.pub` file. Use the file without `.pub`. |
 | status: Dockerfile missing | Repo root (branch built) needs a `Dockerfile`. Push it, rerun `setup`, then `create`. |
 | Demo RUNNING but 5xx / unhealthy | Check `--port` matches container port and `--health` returns 200-399 without login. `lilypad logs <name> 200`. |
+| status: `Last failure: ... Task failed ELB health checks` | The app never answered the health path. Check `--port` matches the container port and `--health` returns 200-399 without a login; `lilypad logs <name> 200`. Fix it, rerun `setup` with every option if config changed, then `redeploy`. |
+| status: `Last failure: ... exit code N` | The app crashed at start. `lilypad logs <name> 200` (the first line repeats the cause) shows why; fix and `redeploy`. |
 | Build failed (status FAILED, no image) | `lilypad build-logs <name> 200` shows the clone and docker build output; `logs` is empty because the app never started. Logs are kept 7 days. |
 | Env vars vanished after edit | `setup` replaces whole config; rerun with `--env-file` again. |
 | 6th demo refused | Cap is 5 active demos per person (25 for admins). Destroy one. |
 
-Debug order for a failed deploy: `lilypad status <name> | jq -r .message`, then `jq .data`, then `lilypad build-logs <name> 200` if the build failed or `lilypad logs <name> 200` if the app did not come up, fix repo or config, `setup` (all options), `redeploy`.
+Debug order for a failed deploy: `lilypad status <name> | jq -r .message` and read its `Last failure:` line first (also `jq -r .data.lastFailure`), then `jq .data`, then `lilypad build-logs <name> 200` if the build failed or `lilypad logs <name> 200` if the app did not come up, fix repo or config, `setup` (all options), `redeploy` (works from FAILED).

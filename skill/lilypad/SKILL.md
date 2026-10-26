@@ -91,6 +91,7 @@ Defaults: branch `main`, port `8080`, health `/` (must return 200-399 without lo
 - Env vars via `--env-file` are visible to the platform operators: no real secrets. 
 - Platform adds no auth to demos. App's own job.
 - Email arrives once per create/redeploy outcome and a reminder 3 days before expiry.
+- On FAILED, run `status` and quote its `Last failure:` line to the user before suggesting fixes. `redeploy` is allowed from FAILED (it builds and creates again).
 - On errors, map via [references/troubleshooting.md](references/troubleshooting.md).
 
 ## Reference

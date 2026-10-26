@@ -10,8 +10,8 @@
 | `lilypad setup [<name>] [--conf FILE] [--repo <url>] [opts]` | Saves demo config. No deploy. Rerun replaces whole config. | Anyone for new/destroyed name (fresh record, GitHub access required, creator too); creator after |
 | `lilypad create <name>` (alias `deploy`) | Builds repo, creates stack. Async. | Creator |
 | `lilypad setup --sample` | Prints a documented sample conf file (`> demoproject.conf`). Local only. | Local |
-| `lilypad redeploy <name>` | Rebuilds latest commit, rolls service, applies `setup` edits. Async. | Creator |
-| `lilypad status <name>` | State, URL, owner, commit, size, expiry, task counts, settled flag. | Creator or admin |
+| `lilypad redeploy <name>` | Rebuilds latest commit, rolls service, applies `setup` edits; also retries a FAILED demo (builds and creates it again). Async. | Creator |
+| `lilypad status <name>` | State, URL, owner, commit, size, expiry, task counts, settled flag; a failed demo adds a `Last failure:` line (`data.lastFailure`) with the cause. | Creator or admin |
 | `lilypad logs <name> [lines]` | The running app's container logs. Default 50, max 500. | Creator or admin |
 | `lilypad build-logs <name> [lines]` | The latest build's log (running, succeeded or failed) and its status. Default 50, max 500. | Creator or admin |
 | `lilypad extend <name>` | Expiry = now + 30 days; 90-day lifetime cap. Async. | Creator or admin |

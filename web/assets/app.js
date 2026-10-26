@@ -26,6 +26,10 @@
   const ACTIVE = new Set(["BUILDING", "DEPLOYING", "RUNNING", "REDEPLOYING"]);
   const DAY = 86400000;
   const TTL_DAYS = 30;
+  // The platform frees a deploy whose stack has ended; after this long redeploy/destroy are allowed anyway.
+  const STUCK_MINUTES = 30;
+  const isStuck = (d) => !!d && (d.status === "DEPLOYING" || d.status === "REDEPLOYING") && !!d.updatedAt &&
+    Date.now() - Date.parse(d.updatedAt) > STUCK_MINUTES * 60000;
   // Fallback only: the platform's whoami reports the caller's cap (5 per user, 25 per admin at the time of writing).
   const USER_CAP = 5, ADMIN_CAP = 25;
   const myCap = () => (S.me && Number.isInteger(S.me.cap) && S.me.cap > 0 ? S.me.cap : isAdmin() ? ADMIN_CAP : USER_CAP);
@@ -1040,7 +1044,8 @@
       if (s === "RUNNING" && url) acts.append(btn("Open demo", { cls: "btn-primary", icon: "i-external", href: url, external: true }));
       const mine = isMine(d);
       if ((s === "CONFIGURED" || s === "FAILED") && mine) { const b = btn(s === "FAILED" ? "Retry deploy" : "Deploy", { cls: "btn-primary", icon: "i-rocket" }); b.addEventListener("click", () => runAction("create", D.name, b)); acts.append(b); }
-      if (s === "RUNNING" && mine) { const b = btn("Redeploy", { icon: "i-redo" }); b.addEventListener("click", () => runAction("redeploy", D.name, b)); acts.append(b); }
+      const stuck = isStuck(Object.assign({}, D.r.data, { status: s }));
+      if ((s === "RUNNING" || stuck) && mine) { const b = btn("Redeploy", { icon: "i-redo" }); b.addEventListener("click", () => runAction("redeploy", D.name, b)); acts.append(b); }
       if (s === "RUNNING" && !d.permanent) { const b = btn("Extend 30 days", { icon: "i-calendar" }); b.addEventListener("click", () => runAction("extend", D.name, b)); acts.append(b); }
       if (s === "RUNNING" && isAdmin()) { const b = btn(d.permanent ? "Unpin" : "Make permanent", { icon: "i-pin" }); b.addEventListener("click", () => runAction(d.permanent ? "unpin" : "pin", D.name, b)); acts.append(b); }
       if (s !== "DESTROYING" && mine) acts.append(btn("Edit settings", { icon: "i-edit", href: "#/edit/" + encodeURIComponent(D.name) }));
@@ -1092,7 +1097,13 @@
     const cat = category(row);
     if (d.status === "FAILED") {
       body.append(h("div", { class: "alert alert-err" }, icon("i-alert"), h("div", { class: "alert-body" },
-        h("strong", { text: "The last deployment failed" }), "Check the logs and the status report below, fix the repo or settings, then deploy again.")));
+        h("strong", { text: "The last deployment failed" }), "Check the logs and the status report below, fix the repo or settings, then deploy again.",
+        typeof d.lastFailure === "string" && d.lastFailure ? h("div", { class: "mt-8", text: "Cause: " + d.lastFailure }) : null,
+        typeof d.lastFailure === "string" && /health check/i.test(d.lastFailure)
+          ? h("div", { class: "mt-8", text: "Check that the port matches the container and the health path returns 200-399 without a login." }) : null)));
+    } else if (isStuck(d)) {
+      body.append(h("div", { class: "alert alert-warn", role: "alert" }, icon("i-alert"), h("div", { class: "alert-body" },
+        h("strong", { text: "This deployment looks stuck" }), "It has not changed for over " + STUCK_MINUTES + " minutes. Redeploy or destroy frees it.")));
     } else if (cat === "busy") {
       body.append(h("div", { class: "alert alert-info" }, icon("i-refresh", "spin"), h("div", { class: "alert-body" },
         h("strong", { text: stageText(row) || "Working…" }), "This panel updates every 10 seconds. Builds usually take 5–10 minutes; you'll get an email when it's done.")));

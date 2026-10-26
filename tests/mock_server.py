@@ -1,5 +1,5 @@
 """Tiny stand-in for the platform: records each request as one JSON line, answers 200 {"ok":true}.
-A key of `lpk_bad` gets 401. Sends CORS headers so web/lilypad.html can be pointed at it.
+A key of `lpk_bad` gets 401. The demo `faildemo` is FAILED: its status carries lastFailure. Sends CORS headers so web/lilypad.html can be pointed at it.
 Usage: mock_server.py <port-file> <log-file>"""
 import json
 import sys
@@ -24,7 +24,15 @@ class H(BaseHTTPRequestHandler):
         with open(sys.argv[2], "a") as f:
             f.write(json.dumps({"key": key, "body": json.loads(body)}) + "\n")
         code = 401 if key == "lpk_bad" else 200
-        out = json.dumps({"ok": code == 200}).encode()
+        reply = {"ok": code == 200}
+        req = json.loads(body)
+        if code == 200 and req.get("name") == "faildemo" and req.get("action") == "status":
+            cause = "Deployment failed | container: Task failed ELB health checks; app: exit code 1"
+            reply.update(message="faildemo: FAILED\nLast failure: " + cause,
+                         data={"name": "faildemo", "status": "FAILED", "lastFailure": cause})
+        elif code == 200 and req.get("name") == "faildemo" and req.get("action") == "redeploy":
+            reply.update(message="Redeploy started for faildemo (from FAILED: builds and creates it again).")
+        out = json.dumps(reply).encode()
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.cors()
