@@ -77,10 +77,11 @@ lilypad whoami
 3. `lilypad create <name>` (alias `deploy`). Async. Then poll `lilypad status <name> | jq -r .message` about once a minute. BUILDING 3-5 min, DEPLOYING 2-5 min, then RUNNING with `Settled: yes`. Give the user the URL.
 4. Changes: edit the conf file (or repeat all `setup` options) and rerun `setup`, then `lilypad redeploy <name>`.
 5. Other: `lilypad logs <name> [lines]` (the running app's container logs) and `lilypad build-logs <name> [lines]` (the latest build: clone, docker build, push; running or finished), both default 50, max 500, kept 7 days; `lilypad extend <name>` (now + 30 days, 90-day lifetime cap), `lilypad list [--client C]`, `lilypad destroy <name>`, admin-only `lilypad pin|unpin <name>` (permanent: no expiry, not destroyable).
+6. Cost: `status` shows the demo's estimated cost (`Cost:` line, `data.cost`: per month, per day and so far since it first went live, at list prices); `list` shows it per live demo plus a total. Quote it when the user asks what a demo costs; it is an estimate and leaves out the shared platform.
 
 Name rule: `^[a-z][a-z0-9-]{1,22}[a-z0-9]$` (3-24 chars). Reserved: www, api, admin, app, mail, status, help, test, core, dns.
 Client rule (optional): `^[a-z0-9]([a-z0-9-]{0,18}[a-z0-9])?$` (1-20 chars). Commands still take the name, not `name-client`.
-Sizes (CPU units / MiB): tiny 256/512, small 512/1024 (default), medium 1024/2048, large 2048/4096 (admin only).
+Sizes (CPU units / MiB): tiny 256/512 (default), small 512/1024, medium 1024/2048, large 2048/4096 (admin only).
 Defaults: branch `main`, port `8080`, health `/` (must return 200-399 without login; add open `/health` if app is behind auth).
 
 ## Rules for the agent
