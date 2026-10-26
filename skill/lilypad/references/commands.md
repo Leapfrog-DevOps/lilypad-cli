@@ -2,7 +2,7 @@
 
 | Command | What it does | Who |
 |---|---|---|
-| `lilypad auth <email>` | Emails a new 30-day key. Replaces any earlier key. 1/min per email. | Anyone |
+| `lilypad auth <email> [--new]` | Emails your 30-day key: the current one again while valid, else a new one. `--new` replaces it (old copies stop working). 1/min per email. | Anyone |
 | `lilypad login <key>` | Saves key to `~/.config/lilypad/key` (mode 600). Local only. | Local |
 | `lilypad logout` | Deletes saved key. Local only. | Local |
 | `lilypad whoami` | Your email, key expiry, role (user, sales, elite, admin) and active-demo cap. | Any valid key |

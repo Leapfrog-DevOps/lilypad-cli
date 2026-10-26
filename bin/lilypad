@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Lilypad CLI. Guide: README.md in the lilypad-cli repo
 #
-#   lilypad auth <email>                      email yourself a 30-day key (replaces any earlier key)
+#   lilypad auth <email> [--new]              email yourself your 30-day key (--new replaces it)
 #   lilypad login <key>                       save the key to ~/.config/lilypad/key (mode 600)
 #   lilypad config url <URL>                  set the platform URL (the installer asks for it)
 #   lilypad update                            reinstall the latest version
@@ -47,6 +47,8 @@ Demos are deleted after 30 days.
       lilypad auth you@lftechnology.com    # exact address, no + aliases
       lilypad login lpk_...                # paste the key from the email (check spam/junk too)
       lilypad whoami                       # shows your email, key expiry, role
+  Lost the email or on another machine? Run auth again: it sends the same key while it is valid.
+  Add --new only to replace the key (for example if it leaked); every saved copy then stops working.
 
 3. Prepare the repo
    - Dockerfile at the repo root (the branch you deploy).
@@ -207,14 +209,16 @@ read_conf() { # read_conf <file>
 command_help() {
   case "$1" in
     auth) cat <<'EOT'
-lilypad auth <email>
+lilypad auth <email> [--new]
 
-Email yourself a 30-day access key. Do this once, then run `lilypad login <key>`.
+Email yourself your 30-day access key. Do this once, then run `lilypad login <key>`.
 
   <email>   your @lftechnology.com address, exactly (no + aliases). Checked locally first:
             another domain is rejected without contacting the platform.
+  --new     replace your key: every saved copy (other machines, the web client) stops working.
+            Use it if the key leaked. Without it you get your current key again while it is valid.
 
-Requesting a key replaces any earlier one at once. One request per address per minute.
+One email per address per minute.
 The email comes from "Lilypad" with subject "Your Lilypad access key". If it is not in your
 inbox within a minute, check your spam/junk folder.
 EOT
@@ -495,13 +499,19 @@ case "$action" in
   -) body="$(cat)" ;;
   '{'*) body="$action" ;;
   auth)
-    [ $# -eq 1 ] || usage
+    new=false
+    args=()
+    for a in "$@"; do
+      if [ "$a" = --new ]; then new=true; else args+=("$a"); fi
+    done
+    [ ${#args[@]} -eq 1 ] || usage
+    set -- "${args[@]}"
     # Same rule as the platform, checked here so a wrong address never reaches the platform.
     email="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
     printf '%s' "$email" | grep -Eq "^[a-z0-9][a-z0-9._-]{0,63}@${email_domain//./\\.}\$" ||
       die "'$1' is not allowed: use your plain @$email_domain address (no + aliases, no other domain)"
     need_jq
-    body="$(jq -nc --arg email "$email" '{action: "auth", email: $email}')"
+    body="$(jq -nc --arg email "$email" --argjson new "$new" '{action: "auth", email: $email} + (if $new then {new: true} else {} end)')"
     ;;
   whoami)
     [ $# -eq 0 ] || usage

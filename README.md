@@ -31,7 +31,7 @@ Requirements: bash CLI needs `curl` and `jq` (the installer offers to install jq
 ## First run
 
 ```bash
-lilypad auth you@lftechnology.com   # emails you a 30-day key (company address only, no + aliases)
+lilypad auth you@lftechnology.com   # emails you your 30-day key (company address only, no + aliases)
 lilypad login lpk_...               # saves it (mode 600)
 lilypad whoami
 export GITHUB_AUTH=~/.ssh/lilypad_acme      # GitHub access: public, a deploy key file, or a PAT (below)

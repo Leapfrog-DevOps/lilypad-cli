@@ -107,6 +107,6 @@ if ($wantSkill -eq 'yes') {
 
 Write-Output ''
 Write-Output 'Done. Next:'
-Write-Output '  lilypad auth you@<company-domain>   # email yourself a 30-day key'
+Write-Output '  lilypad auth you@<company-domain>   # email yourself your 30-day key'
 Write-Output '  lilypad login lpk_...               # save it'
 Write-Output '  lilypad whoami'

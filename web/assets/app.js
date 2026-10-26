@@ -537,7 +537,7 @@
       openMenu(userBtn, [
         { icon: "i-sliders", label: "Settings", run: () => go("settings") },
         { icon: "i-help", label: "Help & guide", run: () => go("help") },
-        { icon: "i-key", label: "Get a new key", run: () => go("welcome?step=email") },
+        { icon: "i-key", label: "Email me my key", run: () => go("welcome?step=email") },
         "-",
         { icon: "i-logout", label: "Sign out", danger: true, run: signOut },
       ], { head: h("div", { class: "menu-head" }, h("span", { class: "eyebrow", text: "Signed in as" }), h("strong", { text: myEmail() || "unknown" }),
@@ -570,15 +570,15 @@
     if (S.authBad) {
       node = h("div", { class: "alert alert-warn", role: "alert" }, icon("i-key"),
         h("div", { class: "alert-body" }, h("strong", { text: "Your access key isn't valid anymore" }),
-          "It expired or was replaced by a newer one. Get a new key to keep going."),
-        btn("Get a new key", { cls: "btn-sm", onclick: () => go("welcome?step=email") }));
+          "It expired or was replaced by a newer one. Ask for your key again to keep going."),
+        btn("Email me my key", { cls: "btn-sm", onclick: () => go("welcome?step=email") }));
     } else if (S.me && S.me.keyExpiresAt) {
       const d = daysLeft(S.me.keyExpiresAt);
       if (d !== null && d <= 3) {
         node = h("div", { class: "alert alert-info" }, icon("i-clock"),
           h("div", { class: "alert-body" }, h("strong", { text: "Your access key expires " + fmtRel(S.me.keyExpiresAt) }),
             "Request a new one before it runs out. The new key replaces this one."),
-          btn("Renew key", { cls: "btn-sm", onclick: () => go("welcome?step=email") }));
+          btn("Renew key", { cls: "btn-sm", onclick: () => { S.onbNew = true; go("welcome?step=email"); } }));
       }
     }
     if (node) root.append(h("div", { class: "global-alert" }, node));
@@ -687,16 +687,21 @@
     const input = h("input", { class: "input", id: "onb-email", type: "email", placeholder: "you@" + EMAIL_DOMAIN, autocomplete: "email", value: S.onb.email || "" });
     const msg = h("span", { class: "err-text", "aria-live": "polite" });
     const send = btn("Email me a key", { cls: "btn-primary btn-lg", icon: "i-mail" });
+    // Off: the platform mails the current key again while it is valid. On: a new key replaces it everywhere.
+    const fresh = h("input", { type: "checkbox", id: "onb-new", checked: !!S.onbNew });
+    fresh.addEventListener("change", () => { S.onbNew = fresh.checked; });
     const submit = async () => {
       const email = input.value.toLowerCase().replace(/\s+/g, "");
       const re = new RegExp("^[a-z0-9][a-z0-9._-]{0,63}@" + EMAIL_DOMAIN.replace(/\./g, "\\.") + "$");
       if (!re.test(email)) { input.setAttribute("aria-invalid", "true"); msg.textContent = "Use your plain @" + EMAIL_DOMAIN + " address (no + aliases)."; input.focus(); return; }
       busyBtn(send, true);
-      const r = await api({ action: "auth", email });
+      const r = await api(fresh.checked ? { action: "auth", email, new: true } : { action: "auth", email });
       busyBtn(send, false);
       S.onb.email = email;
       if (!r.ok) { onbGo("email", errText(r)); return; }
       S.onb.sent = true;
+      S.onb.reused = !!(r.data && r.data.reused);
+      S.onbNew = false;
       onbGo("key");
     };
     send.addEventListener("click", submit);
@@ -706,7 +711,9 @@
       h("h2", { text: "Sign in with your work email" }),
       h("p", { class: "lead", text: "We'll email you an access key. No password, nothing to install." }),
       h("div", { class: "field" }, h("label", { for: "onb-email", text: "Work email" }), input, msg,
-        h("span", { class: "hint", text: "Your exact @" + EMAIL_DOMAIN + " address. A new key replaces any older one." })),
+        h("span", { class: "hint", text: "Your exact @" + EMAIL_DOMAIN + " address. Asking again sends the key you already have while it is valid." })),
+      h("div", { class: "field" }, h("label", { class: "switch", for: "onb-new" }, fresh, "Send a new key instead"),
+        h("span", { class: "hint", text: "Only if your key leaked: every saved copy, on any machine, stops working." })),
       err,
       h("div", { class: "onb-actions" }, onbBack(), send),
       h("p", { class: "onb-alt" }, "Already have a key? ", h("button", { class: "linklike", type: "button", text: "Paste it instead", onclick: () => onbGo("key") })),
@@ -746,12 +753,13 @@
       h("h2", { text: "Paste your access key" }),
       h("p", { class: "lead", text: "It's in the email from Lilypad, subject “Your Lilypad access key”." }),
       S.onb.sent ? h("div", { class: "mailbox" }, icon("i-mail"), h("div", null, h("strong", { text: "Check " + S.onb.email }),
-        h("div", { text: "It usually arrives within a minute. Not there? Look in spam or junk." }))) : null,
+        h("div", { text: (S.onb.reused ? "We sent your current key again; copies you saved elsewhere still work. " : "We sent a new key; any older key has stopped working. ") +
+          "It usually arrives within a minute. Not there? Look in spam or junk." }))) : null,
       h("div", { class: "field" }, h("label", { for: "onb-key", text: "Access key" }), h("div", { class: "input-group" }, input, eye),
         h("span", { class: "hint", text: "Starts with lpk_ and works for 30 days. Saved in this browser only." })),
       err,
       h("div", { class: "onb-actions" }, onbBack(), verify),
-      h("p", { class: "onb-alt" }, "No email? ", h("button", { class: "linklike", type: "button", text: "Send a new key", onclick: () => onbGo("email") }), " (one per minute)."),
+      h("p", { class: "onb-alt" }, "No email? ", h("button", { class: "linklike", type: "button", text: "Send it again", onclick: () => onbGo("email") }), " (one per minute)."),
     ]);
   }
 
@@ -1802,7 +1810,8 @@
     ["Clean up", "Demos expire after 30 days, with a warning on day 27. Extend adds 30 days, up to 90 in total. Destroy when you're done."],
   ];
   const FAQ = [
-    ["The key email didn't arrive.", "It usually takes under a minute. Check spam or junk, and that you used your plain @" + EMAIL_DOMAIN + " address (no + aliases). You can ask for a new key once a minute."],
+    ["The key email didn't arrive.", "It usually takes under a minute. Check spam or junk, and that you used your plain @" + EMAIL_DOMAIN + " address (no + aliases). You can ask for your key again once a minute."],
+    ["Can I use the same key on several machines?", "Yes. Asking for your key again (here, or lilypad auth in the CLI) emails the same key while it is valid, so every copy keeps working. Turn on \u201cSend a new key instead\u201d (lilypad auth --new) only if the key leaked or is about to expire: the old key then stops working everywhere."],
     ["Why isn't my demo on the dashboard?", "The dashboard lists your demos that aren't destroyed (admins see everyone's). If one is missing, refresh, or open it by name at the bottom of the Demos page."],
     ["The build failed. What now?", "Open the demo and check the Build log tab: it shows the clone and docker build output. If the build passed but the app never got healthy, check App logs and the status report. The usual suspects: no Dockerfile at the root, the wrong port, or a health path that needs a login. Logs are kept 7 days."],
     ["How long does a demo live?", "30 days. You get a warning email on day 27. Extend moves the expiry to 30 days from now, up to 90 days in total."],

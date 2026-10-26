@@ -1,6 +1,6 @@
 #!/usr/bin/env pwsh
 # Lilypad CLI for Windows PowerShell 5.1 and PowerShell 7+. Same commands as the bash CLI.
-#   lilypad auth <email> | login <key> | logout | whoami
+#   lilypad auth <email> [--new] | login <key> | logout | whoami
 #   lilypad list [--client C]
 #   lilypad setup [<name>] [--conf FILE] [--repo <url>] [--client C] [--branch B] [--port N] [--health /p] [--size S] [--env-file F] [--notes T]
 #     GitHub access from $env:GITHUB_AUTH or a hidden prompt: a PAT, a deploy key file path, or "public"
@@ -40,6 +40,8 @@ Demos are deleted after 30 days.
       lilypad auth you@lftechnology.com    # exact address, no + aliases
       lilypad login lpk_...                # paste the key from the email (check spam/junk too)
       lilypad whoami                       # shows your email, key expiry, role
+  Lost the email or on another machine? Run auth again: it sends the same key while it is valid.
+  Add --new only to replace the key (for example if it leaked); every saved copy then stops working.
 
 3. Prepare the repo
    - Dockerfile at the repo root (the branch you deploy).
@@ -236,12 +238,16 @@ switch -Regex ($action) {
   '^-$' { $body = [Console]::In.ReadToEnd(); break }
   '^\{' { $body = $action; break }
   '^auth$' {
-    if ($rest.Count -ne 1) { Usage }
-    $email = ($rest[0] -replace '\s', '').ToLowerInvariant()
+    $new = @($rest | Where-Object { $_ -eq '--new' -or $_ -eq '-New' }).Count -gt 0
+    $addr = @($rest | Where-Object { $_ -ne '--new' -and $_ -ne '-New' })
+    if ($addr.Count -ne 1) { Usage }
+    $email = ($addr[0] -replace '\s', '').ToLowerInvariant()
     if ($email -notmatch ('^[a-z0-9][a-z0-9._-]{0,63}@' + [regex]::Escape($emailDomain) + '$')) {
-      Die "'$($rest[0])' is not allowed: use your plain @$emailDomain address (no + aliases, no other domain)"
+      Die "'$($addr[0])' is not allowed: use your plain @$emailDomain address (no + aliases, no other domain)"
     }
-    $body = ToJson @{ action = 'auth'; email = $email }; break
+    $o = @{ action = 'auth'; email = $email }
+    if ($new) { $o.new = $true }
+    $body = ToJson $o; break
   }
   '^whoami$' { if ($rest.Count -ne 0) { Usage }; $body = ToJson @{ action = $action }; break }
   '^list$' {

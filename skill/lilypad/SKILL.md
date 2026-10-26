@@ -47,10 +47,10 @@ lilypad login lpk_...               # saves key, mode 600
 lilypad whoami
 ```
 
-- After `auth` succeeds, tell the user: the key arrives within a minute from "Lilypad", subject "Your Lilypad access key". **Check the spam/junk folder too** if it is not in the inbox. If still missing after a few minutes, wait out the 1-minute limit and run `auth` again (the newest key replaces the older one).
+- After `auth` succeeds, tell the user: the key arrives within a minute from "Lilypad", subject "Your Lilypad access key". **Check the spam/junk folder too** if it is not in the inbox. If still missing after a few minutes, wait out the 1-minute limit and run `auth` again (it sends the same key again while it is valid).
 - The user must read the key from the email and give it to you (or run `login` themselves). Never invent or guess one.
 - Never print, echo, log or repeat the key, any PAT or any private key back. Never `cat` a deploy key file. Pass keys through env or the saved file, never as part of a visible message.
-- `auth` replaces any earlier key at once. 1 request per email per minute.
+- `auth` emails the current key again while it is valid, so copies on other machines keep working; an expired key gets a new one. `auth --new <email>` replaces the key at once: every saved copy stops working. Use `--new` only when the user asks for a new key or says the key leaked. 1 email per address per minute.
 - The CLI rejects any address that is not a plain `@lftechnology.com` one (other domains, `+` aliases, subdomains) before contacting the platform. Check the address yourself first and ask the user for their company email instead of trying a personal one.
 
 ## Deploy workflow

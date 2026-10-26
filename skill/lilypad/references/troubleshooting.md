@@ -2,14 +2,15 @@
 
 | Symptom | Meaning and fix |
 |---|---|
-| `HTTP 401` | No key, wrong, replaced or expired. `lilypad auth <email>`, then `lilypad login <key>`. |
+| `HTTP 401` | No key, wrong, replaced or expired. `lilypad auth <email>` (mails your current key, or a new one if it expired), then `lilypad login <key>`. |
 | `HTTP 400` + `errors` | Input rejected. `errors` names the field: bad email (exact `@lftechnology.com`, no `+`), bad demo name, missing GitHub access, passphrase-protected or `.pub` deploy key, bad size/port. |
 | `HTTP 403` | Name owned by someone else, or caller is not creator/admin, or `large` without admin. |
 | `HTTP 409` | Demo busy (building, deploying, destroying). Wait until `Settled: yes`, retry. A FAILED demo is not busy: `redeploy` (or `create`) retries it. |
 | `HTTP 409` "is still being deployed" for over 30 min | Deploy looks stuck. `lilypad status <name>` frees it if its stack has already ended (it turns FAILED or RUNNING); after 30 minutes `redeploy` or `destroy` are allowed anyway. |
 | `HTTP 429` | Key mailed to that address under a minute ago. Wait, retry. |
 | `HTTP 502` on `auth` | The platform could not send the email. Previous key still works. Tell the Lilypad admins. |
-| `auth` ok but no email | Check spam/junk as well as inbox (sender "Lilypad", subject "Your Lilypad access key"). Still missing: wait 1 minute, run `auth` again. |
+| `auth` ok but no email | Check spam/junk as well as inbox (sender "Lilypad", subject "Your Lilypad access key"). Still missing: wait 1 minute, run `auth` again (same key). |
+| Key leaked, or expires in a day or two | `lilypad auth --new <email>`, then `lilypad login <key>` on every machine: the old key stops working at once. |
 | `lilypad: jq is required` | bash CLI only: install jq (the PowerShell CLI does not need it). |
 | `no platform URL configured` | Run `lilypad config url <URL>` or re-run the installer. |
 | CLI hangs or errors before any HTTP reply | Platform URL unset or wrong. Ask the user for it and have them run `lilypad config url <URL>`. |

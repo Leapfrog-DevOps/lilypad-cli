@@ -164,6 +164,6 @@ fi
 
 say ""
 say "Done. Next:"
-say "  lilypad auth you@<company-domain>   # email yourself a 30-day key"
+say "  lilypad auth you@<company-domain>   # email yourself your 30-day key"
 say "  lilypad login lpk_...               # save it"
 say "  lilypad whoami"

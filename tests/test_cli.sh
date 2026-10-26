@@ -30,6 +30,13 @@ ok "client-side email check blocks other domains"
 "$cli" auth Someone@lftechnology.com >/dev/null 2>&1
 [ "$(last | jq -r .body.email)" = "someone@lftechnology.com" ] || bad "auth body"
 ok "auth sends normalised email"
+[ "$(last | jq -r '.body | has("new")')" = "false" ] || bad "auth sends new only when asked"
+"$cli" auth --new someone@lftechnology.com >/dev/null 2>&1
+[ "$(last | jq -c '.body | {email, new}')" = '{"email":"someone@lftechnology.com","new":true}' ] || bad "auth --new before email"
+"$cli" auth someone@lftechnology.com --new >/dev/null 2>&1
+[ "$(last | jq -r .body.new)" = "true" ] || bad "auth --new after email"
+"$cli" auth --new >/dev/null 2>&1 && bad "auth --new without email"
+ok "auth --new asks for a new key"
 
 LILYPAD_EMAIL_DOMAIN=example.org "$cli" auth a@example.org >/dev/null 2>&1 || bad "domain override"
 ok "LILYPAD_EMAIL_DOMAIN override"
