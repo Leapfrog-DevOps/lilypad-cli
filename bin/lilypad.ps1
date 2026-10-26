@@ -39,7 +39,7 @@ Demos are deleted after 30 days.
 2. Get an access key (your company email is your identity)
       lilypad auth you@lftechnology.com    # exact address, no + aliases
       lilypad login lpk_...                # paste the key from the email (check spam/junk too)
-      lilypad whoami                       # shows your email, key expiry, admin or not
+      lilypad whoami                       # shows your email, key expiry, role
 
 3. Prepare the repo
    - Dockerfile at the repo root (the branch you deploy).
@@ -95,7 +95,7 @@ Demos are deleted after 30 days.
       lilypad list                 # your demos, any status but destroyed
       lilypad extend acme-poc      # expiry = now + 30 days (90 days total at most)
       lilypad destroy acme-poc     # permanent; the name is free for anyone afterwards
-   A warning email arrives on day 27. At most 5 active demos per person (25 for admins).
+   A warning email arrives on day 27. At most 5 active demos per person (25 for sales, 50 for admins).
 
 More: lilypad --help, lilypad <command> --help.
 '@ | Write-Output

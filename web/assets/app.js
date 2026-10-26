@@ -30,9 +30,9 @@
   const STUCK_MINUTES = 30;
   const isStuck = (d) => !!d && (d.status === "DEPLOYING" || d.status === "REDEPLOYING") && !!d.updatedAt &&
     Date.now() - Date.parse(d.updatedAt) > STUCK_MINUTES * 60000;
-  // Fallback only: the platform's whoami reports the caller's cap (5 per user, 25 per admin at the time of writing).
-  const USER_CAP = 5, ADMIN_CAP = 25;
-  const myCap = () => (S.me && Number.isInteger(S.me.cap) && S.me.cap > 0 ? S.me.cap : isAdmin() ? ADMIN_CAP : USER_CAP);
+  // Fallback only: the platform's whoami reports the caller's role and cap (user 5, sales 25, admin 50 at the time of writing).
+  const ROLE_CAPS = { user: 5, sales: 25, admin: 50 };
+  const myCap = () => (S.me && Number.isInteger(S.me.cap) && S.me.cap > 0 ? S.me.cap : ROLE_CAPS[myRole()] || ROLE_CAPS.user);
   const DEFAULT_REFRESH = 300000;
   const REFRESH_OPTS = [[0, "Off"], [10000, "10s"], [30000, "30s"], [60000, "1m"], [120000, "2m"], [180000, "3m"], [300000, "5m"], [600000, "10m"]];
   const SIZES = [
@@ -180,11 +180,15 @@
   const hasKey = () => !!store.get(K.key);
   const myEmail = () => (S.me && S.me.email ? S.me.email.toLowerCase() : "");
   const isAdmin = () => !!(S.me && S.me.admin);
+  // Older platforms send only `admin`. Sales differs from user only in the cap.
+  const myRole = () => (!S.me ? "user" : S.me.role || (S.me.admin ? "admin" : "user"));
+  const roleLabel = () => ({ admin: "Admin", sales: "Sales" })[myRole()] || "";
+  const toMe = (d) => ({ email: d.email, keyExpiresAt: d.keyExpiresAt || "", admin: d.admin === true, role: d.role, cap: d.cap });
   // Editing is creator-only and hidden on other people's demos; deploy and redeploy are open to admins too.
   // Unknown owner counts as mine.
   const isMine = (d) => !d.owner || !myEmail() || d.owner.toLowerCase() === myEmail();
   const canDeploy = (d) => isMine(d) || isAdmin();
-  const adminTag = () => (isAdmin() ? h("span", { class: "tag admin", text: "Admin" }) : null);
+  const adminTag = () => (roleLabel() ? h("span", { class: "tag " + myRole(), text: roleLabel() }) : null);
 
   function demoDomain() {
     if (S.cfg.demoDomain) return S.cfg.demoDomain;
@@ -526,7 +530,7 @@
     const email = myEmail();
     const userBtn = h("button", { class: "userbtn", type: "button", "aria-haspopup": "menu", "aria-expanded": "false", id: "userbtn" },
       h("span", { class: "avatar", text: initials(email || "?") }), h("span", { class: "email", text: email || "Account" }),
-      h("span", { class: "tag admin", id: "admin-badge", text: "Admin", hidden: !isAdmin() }));
+      h("span", { class: "tag " + myRole(), id: "admin-badge", text: roleLabel(), hidden: !roleLabel() }));
     userBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       const exp = S.me && S.me.keyExpiresAt;
@@ -538,6 +542,7 @@
         { icon: "i-logout", label: "Sign out", danger: true, run: signOut },
       ], { head: h("div", { class: "menu-head" }, h("span", { class: "eyebrow", text: "Signed in as" }), h("strong", { text: myEmail() || "unknown" }),
         isAdmin() ? h("span", { class: "hint", text: "Admin: you can see, deploy, redeploy, extend and destroy every demo." }) : null,
+        myRole() === "sales" ? h("span", { class: "hint", text: "Sales: you can have up to " + myCap() + " active demos." }) : null,
         exp ? h("span", { class: "hint", text: "Key expires " + fmtRel(exp) + " (" + fmtDate(exp) + ")" }) : null) });
     });
     return h("header", { class: "topbar" }, h("div", { class: "topbar-in" },
@@ -555,7 +560,7 @@
       if (a.getAttribute("data-nav") === active) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
     });
     const ub = $("#userbtn");
-    if (ub && S.me) { $(".avatar", ub).textContent = initials(S.me.email); $(".email", ub).textContent = S.me.email; $("#admin-badge").hidden = !isAdmin(); }
+    if (ub && S.me) { $(".avatar", ub).textContent = initials(S.me.email); $(".email", ub).textContent = S.me.email; const b = $("#admin-badge"); b.hidden = !roleLabel(); b.textContent = roleLabel(); b.className = "tag " + myRole(); }
   }
   function renderGlobalAlert() {
     const root = $("#global-alert");
@@ -581,7 +586,7 @@
   async function whoami() {
     if (!apiUrl() || !hasKey()) return null;
     const r = await api({ action: "whoami" });
-    if (r.ok && r.data && r.data.email) { S.me = { email: r.data.email, keyExpiresAt: r.data.keyExpiresAt || "", admin: r.data.admin === true, cap: r.data.cap }; S.authBad = false; }
+    if (r.ok && r.data && r.data.email) { S.me = toMe(r.data); S.authBad = false; }
     renderGlobalAlert();
     updateNav(route());
     updateDemos();
@@ -732,7 +737,7 @@
         onbGo("key", r.code === 401 ? "That key isn't valid. It may have been replaced by a newer one; use the latest email." : errText(r));
         return;
       }
-      S.me = { email: r.data.email, keyExpiresAt: r.data.keyExpiresAt || "", admin: r.data.admin === true, cap: r.data.cap };
+      S.me = toMe(r.data);
       onbGo("done");
     };
     verify.addEventListener("click", submit);
@@ -1803,7 +1808,7 @@
     ["How long does a demo live?", "30 days. You get a warning email on day 27. Extend moves the expiry to 30 days from now, up to 90 days in total."],
     ["Can I change settings after deploying?", "Yes: Edit settings, save, then Redeploy. The client part of the address is fixed after the first deploy; destroy and set up again to change it."],
     ["Can I put secrets in environment variables?", "No. Platform operators can read them. Use test credentials only."],
-    ["How many demos can I run?", "Five active demos per person (25 for admins). Destroy one to free a slot. Demos an admin made permanent don't count."],
+    ["How many demos can I run?", "Five active demos per person (25 for sales, 50 for admins); ask a Lilypad admin if you need the sales role. Destroy one to free a slot. Demos an admin made permanent don't count."],
     ["Who can open or manage my demo?", "Anyone with the link can open the app itself, so add your own login if it needs one. Only you and Lilypad admins can see its status, app logs and build log, deploy or redeploy it, extend it or destroy it. Only you can change its settings."],
     ["Where is my key kept?", "In this browser's local storage. Sign out removes it. Requesting a new key replaces the old one everywhere."],
     ["Keyboard shortcuts?", "/ search · n new demo · r refresh · ? help · Esc closes panels and menus."],

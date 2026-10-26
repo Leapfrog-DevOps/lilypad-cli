@@ -5,7 +5,7 @@
 | `lilypad auth <email>` | Emails a new 30-day key. Replaces any earlier key. 1/min per email. | Anyone |
 | `lilypad login <key>` | Saves key to `~/.config/lilypad/key` (mode 600). Local only. | Local |
 | `lilypad logout` | Deletes saved key. Local only. | Local |
-| `lilypad whoami` | Your email, key expiry, and whether you are an admin. | Any valid key |
+| `lilypad whoami` | Your email, key expiry, role (user, sales, admin) and active-demo cap. | Any valid key |
 | `lilypad list [--client C]` | Demos not yet destroyed (set up, building, live, failed) with client, owner, status and expiry; optionally one client's. | Any valid key |
 | `lilypad setup [<name>] [--conf FILE] [--repo <url>] [opts]` | Saves demo config. No deploy. Rerun replaces whole config. | Anyone for new/destroyed name (fresh record, GitHub access required, creator too); creator after |
 | `lilypad create <name>` (alias `deploy`) | Builds repo, creates stack. Async. | Creator or admin |
