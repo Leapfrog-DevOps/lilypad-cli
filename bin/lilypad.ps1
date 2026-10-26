@@ -95,7 +95,7 @@ Demos are deleted after 30 days.
       lilypad list                 # your demos, any status but destroyed
       lilypad extend acme-poc      # expiry = now + 30 days (90 days total at most)
       lilypad destroy acme-poc     # permanent; the name is free for anyone afterwards
-   A warning email arrives on day 27. At most 5 active demos per person (25 for sales, 50 for admins).
+   A warning email arrives on day 27. At most 5 active demos per person (25 for sales, 50 for elite and admins).
 
 More: lilypad --help, lilypad <command> --help.
 '@ | Write-Output

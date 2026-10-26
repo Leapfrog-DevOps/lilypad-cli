@@ -25,6 +25,6 @@
 | status: `Last failure: ... exit code N` | The app crashed at start. `lilypad logs <name> 200` (the first line repeats the cause) shows why; fix and `redeploy`. |
 | Build failed (status FAILED, no image) | `lilypad build-logs <name> 200` shows the clone and docker build output; `logs` is empty because the app never started. Logs are kept 7 days. |
 | Env vars vanished after edit | `setup` replaces whole config; rerun with `--env-file` again. |
-| 6th demo refused | Cap is 5 active demos per person (25 for sales, 50 for admins). Destroy one, or ask a Lilypad admin about the sales role. |
+| 6th demo refused | Cap is 5 active demos per person (25 for sales, 50 for elite and admins). Destroy one, or ask a Lilypad admin about the sales or elite role. |
 
 Debug order for a failed deploy: `lilypad status <name> | jq -r .message` and read its `Last failure:` line first (also `jq -r .data.lastFailure`), then `jq .data`, then `lilypad build-logs <name> 200` if the build failed or `lilypad logs <name> 200` if the app did not come up, fix repo or config, `setup` (all options), `redeploy` (works from FAILED).

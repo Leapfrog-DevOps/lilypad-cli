@@ -87,7 +87,7 @@ Defaults: branch `main`, port `8080`, health `/` (must return 200-399 without lo
 
 - **Confirm before `destroy`** (irreversible), before `redeploy` on someone's live demo, before an admin's `create`/`redeploy` of a demo they don't own (name the owner from `status`), and before `create`/`redeploy` of a name the user has not named explicitly.
 - `create`, `redeploy`, `extend`, `destroy` are async: reply "accepted" only. Verify with `status`. Do not claim success until `status` shows RUNNING / DESTROYED and `Settled: yes`.
-- Only the creator may `setup` (existing). Creator or admin may `create`, `redeploy`, `status`, `logs`, `build-logs`, `extend`, `destroy`; when an admin deploys someone else's demo, the creator gets a note. Max 5 active demos per person (25 for sales, 50 for admins); `whoami` shows the role and cap.
+- Only the creator may `setup` (existing). Creator or admin may `create`, `redeploy`, `status`, `logs`, `build-logs`, `extend`, `destroy`; when an admin deploys someone else's demo, the creator gets a note. Max 5 active demos per person (25 for sales, 50 for elite and admins); `whoami` shows the role and cap.
 - Env vars via `--env-file` are visible to the platform operators: no real secrets. 
 - Platform adds no auth to demos. App's own job.
 - Email arrives once per create/redeploy outcome and a reminder 3 days before expiry.

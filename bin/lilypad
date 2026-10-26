@@ -101,7 +101,7 @@ Demos are deleted after 30 days.
       lilypad list                 # your demos, any status but destroyed
       lilypad extend acme-poc      # expiry = now + 30 days (90 days total at most)
       lilypad destroy acme-poc     # permanent; the name is free for anyone afterwards
-   A warning email arrives on day 27. At most 5 active demos per person (25 for sales, 50 for admins).
+   A warning email arrives on day 27. At most 5 active demos per person (25 for sales, 50 for elite and admins).
 
 More: lilypad --help, lilypad <command> --help.
 EOT
@@ -253,7 +253,7 @@ EOT
     whoami) cat <<'EOT'
 lilypad whoami
 
-Show the email your key belongs to, when the key expires, your role (user, sales or admin)
+Show the email your key belongs to, when the key expires, your role (user, sales, elite or admin)
 and how many active demos you may have. No options.
 EOT
       ;;
@@ -329,7 +329,7 @@ only says "accepted". You get one email when it is live, or one if it fails.
   <name>    the demo name used in setup
 
 Usually takes 5 to 10 minutes. Poll with `lilypad status <name>`. Creator or admin (the creator
-gets a note when an admin does it). Up to 5 active demos per person (25 for sales, 50 for admins).
+gets a note when an admin does it). Up to 5 active demos per person (25 for sales, 50 for elite and admins).
 EOT
       ;;
     redeploy) cat <<'EOT'
