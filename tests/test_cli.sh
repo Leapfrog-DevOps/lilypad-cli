@@ -58,7 +58,7 @@ export LILYPAD_URL="$url"
 [ "$(last | jq -r '.body.args // "none"')" = none ] || bad "list sent args without --client"
 "$cli" list --client acme >/dev/null; [ "$(last | jq -r .body.args.client)" = acme ] || bad list-client
 "$cli" list --bogus >/dev/null 2>&1 && bad "list accepted an unknown option" || true
-for c in create redeploy status extend destroy; do
+for c in create redeploy status metrics extend destroy; do
   "$cli" "$c" demo1 >/dev/null
   [ "$(last | jq -r .body.action)/$(last | jq -r .body.name)" = "$c/demo1" ] || bad "$c"
 done
@@ -67,7 +67,13 @@ done
 "$cli" build-logs demo1 100 >/dev/null
 [ "$(last | jq -r .body.action)/$(last | jq -r .body.args.lines)" = build-logs/100 ] || bad build-logs
 "$cli" build-logs demo1 >/dev/null; [ "$(last | jq -r '.body.args // "none"')" = none ] || bad build-logs-default
+"$cli" metrics >/dev/null 2>&1 && bad "metrics accepted no name" || true
+"$cli" metrics demo1 extra >/dev/null 2>&1 && bad "metrics accepted two names" || true
 ok "simple commands"
+out="$("$cli" metrics busydemo)" || bad "metrics exited non-zero"
+[ "$(jq -r '.data.requests.total' <<<"$out")/$(jq -r '.data.codes["5xx"]' <<<"$out")" = 5412/31 ] || bad "metrics data lost: $out"
+grep -q "Total: 5,412" <<<"$(jq -r .message <<<"$out")" || bad "metrics message lost: $out"
+ok "metrics passes requests, codes and message through"
 out="$("$cli" status faildemo)" || bad "status on a FAILED demo exited non-zero"
 grep -q "Last failure: .*ELB health checks" <<<"$(jq -r .message <<<"$out")" || bad "status message lost Last failure: $out"
 [ "$(jq -r .data.lastFailure <<<"$out")" != null ] || bad "status data lost lastFailure: $out"
@@ -75,7 +81,7 @@ ok "status passes Last failure through (message and data.lastFailure)"
 out="$("$cli" redeploy faildemo)" || bad "redeploy on a FAILED demo exited non-zero"
 [ "$(last | jq -r .body.action)" = redeploy ] && [ "$(jq -r .ok <<<"$out")" = true ] || bad "redeploy on FAILED not accepted: $out"
 ok "redeploy on a FAILED demo is accepted"
-[ "$("$cli" --version)" = "lilypad 1.2.0" ] || bad version
+[ "$("$cli" --version)" = "lilypad 1.3.0" ] || bad version
 ok "--version"
 
 printf 'FOO=bar\n' >"$work/app.env"

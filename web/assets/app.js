@@ -6,7 +6,7 @@
   platform goes through textContent (never innerHTML). The platform URL and key are kept in
   localStorage; the GitHub access value (token, deploy key or "public") is sent once and never stored.
 
-  Views (hash routes): #/welcome (onboarding), #/demos, #/demo/<name>?tab=overview|logs|build|settings
+  Views (hash routes): #/welcome (onboarding), #/demos, #/demo/<name>?tab=overview|logs|build|metrics|settings
   (detail drawer over the dashboard), #/new, #/edit/<name>, #/help (also public, no key needed), #/settings.
 */
 "use strict";
@@ -14,7 +14,8 @@
   // ---------------------------------------------------------------------------------------------
   // Constants
   // ---------------------------------------------------------------------------------------------
-  const K = { url: "lilypad.url", key: "lilypad.key", refresh: "lilypad.refresh", tracked: "lilypad.tracked", theme: "lilypad.theme" };
+  const K = { url: "lilypad.url", key: "lilypad.key", refresh: "lilypad.refresh", tracked: "lilypad.tracked", theme: "lilypad.theme",
+    sort: "lilypad.sort", group: "lilypad.group", view: "lilypad.view" };
   const EMAIL_DOMAIN = "lftechnology.com";
   const NAME_RE = /^[a-z][a-z0-9-]{1,22}[a-z0-9]$/;
   const CLIENT_RE = /^[a-z0-9]([a-z0-9-]{0,18}[a-z0-9])?$/;
@@ -270,7 +271,7 @@
     anchor.parentElement.append(m);
     const rect = anchor.getBoundingClientRect();
     if (window.innerHeight - rect.bottom < 300 && rect.top > 320) m.classList.add("up");
-    const host = anchor.closest(".demo");
+    const host = anchor.closest(".demo, .demo-row");
     if (host) host.classList.add("menu-open");
     anchor.setAttribute("aria-expanded", "true");
     S.menu = { el: m, anchor, host };
@@ -342,6 +343,7 @@
     return flat.length <= limit ? flat : flat.slice(0, limit - 1).trimEnd() + "\u2026";
   }
   const money = (n) => "$" + Number(n).toFixed(2);
+  const count = (n) => Number(n || 0).toLocaleString("en-US");
   // Estimated dollars a month while the demo has a live stack; null before it first went live (platform estimate).
   const monthlyOf = (cost) => (cost && cost.billing && typeof cost.monthly === "number" ? cost.monthly : null);
   function rowFromStatus(d) {
@@ -428,6 +430,11 @@
     const v = parseInt(raw, 10);
     return raw !== "" && REFRESH_OPTS.some((o) => o[0] === v) ? v : DEFAULT_REFRESH;
   }
+  // Dashboard preferences, per browser. Unknown stored values fall back to the default.
+  const SORT_OPTS = [["name", "Project name"], ["client", "Client"], ["status", "Status"]];
+  const sortBy = () => { const v = store.get(K.sort); return SORT_OPTS.some((o) => o[0] === v) ? v : "name"; };
+  const grouped = () => store.get(K.group) !== "0";
+  const viewMode = () => (store.get(K.view) === "list" ? "list" : "cards");
   function schedule() {
     clearInterval(S.timer);
     S.timer = null;
@@ -796,6 +803,19 @@
     const now = btn("", { cls: "btn-icon", icon: "i-refresh", aria: "Refresh now", title: "Refresh now (r)" });
     now.id = "refresh-now";
     now.addEventListener("click", () => refreshAll({ deep: true }));
+    const sort = h("select", { class: "select", id: "sort-sel", "aria-label": "Sort demos" },
+      SORT_OPTS.map((o) => h("option", { value: o[0], text: "Sort: " + o[1], selected: o[0] === sortBy() })));
+    sort.addEventListener("change", () => { store.set(K.sort, sort.value); updateDemos(); });
+    const group = btn("Group by client", { cls: "btn-sm seg-btn", icon: "i-layers", title: "Group demos by client" });
+    group.id = "group-btn";
+    group.addEventListener("click", () => { store.set(K.group, grouped() ? "0" : "1"); updateDemos(); });
+    const viewBtn = (v, ic, label) => {
+      const b = btn("", { cls: "btn-sm btn-icon seg-btn", icon: ic, aria: label, title: label });
+      b.dataset.view = v;
+      b.addEventListener("click", () => { store.set(K.view, v); updateDemos(); });
+      return b;
+    };
+    const views = h("div", { class: "seg", role: "group", "aria-label": "View" }, viewBtn("cards", "i-grid", "Card view"), viewBtn("list", "i-list", "List view"));
 
     const openInput = h("input", { class: "input", placeholder: "demo-name", "aria-label": "Demo name", autocomplete: "off", spellcheck: "false" });
     const openGo = () => {
@@ -812,7 +832,7 @@
       h("div", { class: "stats", id: "stats" }),
       h("div", { class: "toolbar" },
         h("div", { class: "input-icon" }, icon("i-search"), search),
-        client,
+        client, sort, group, views,
         h("span", { class: "grow" }),
         h("span", { class: "updated", id: "updated", "aria-live": "polite" }),
         h("div", { class: "refresh-box", title: "Auto-refresh" }, h("span", { class: "label" }, icon("i-clock", "icon-s"), "Auto"), sel),
@@ -829,11 +849,16 @@
   function filteredDemos() {
     const q = S.filter.q, c = S.filter.client;
     const rank = (d) => ({ busy: 0, fail: 1, idle: 2, live: 3, unknown: 4 })[category(d)];
+    const by = sortBy();
+    const cmp = by === "client" ? (a, b) => byClient(a.client, b.client)
+      : by === "status" ? (a, b) => rank(a) - rank(b) : () => 0;
     return Array.from(S.demos.values())
       .filter((d) => !c || d.client === c)
       .filter((d) => !q || [d.name, d.client, d.owner].some((v) => (v || "").toLowerCase().indexOf(q) >= 0))
-      .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+      .sort((a, b) => cmp(a, b) || a.name.localeCompare(b.name));
   }
+  // Clients A–Z; demos with no client last.
+  function byClient(a, b) { return (!a) - (!b) || (a || "").localeCompare(b || ""); }
 
   function updateDemos() {
     const grid = $("#grid");
@@ -862,7 +887,7 @@
     if (cf) {
       const clients = Array.from(new Set(all.map((d) => d.client).filter(Boolean))).sort();
       const cur = S.filter.client;
-      clear(cf).append(h("option", { value: "", text: "All clients" }), clients.map((c) => h("option", { value: c, text: c, selected: c === cur })));
+      add(clear(cf), [h("option", { value: "", text: "All clients" }), clients.map((c) => h("option", { value: c, text: c, selected: c === cur }))]);
       cf.hidden = clients.length === 0 && !cur;
     }
     const up = $("#updated");
@@ -870,7 +895,12 @@
     const le = clear($("#list-error"));
     if (S.listError) le.append(h("div", { class: "alert alert-err", role: "alert", style: { marginBottom: "16px" } }, icon("i-alert"), h("div", { class: "alert-body", text: S.listError })));
 
+    const view = viewMode();
+    const gb = $("#group-btn");
+    if (gb) gb.setAttribute("aria-pressed", String(grouped()));
+    document.querySelectorAll(".seg [data-view]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.view === view)));
     clear(grid);
+    grid.className = view === "list" && S.loaded ? "list" : "grid";
     if (!S.loaded) {
       for (let i = 0; i < 3; i++) {
         grid.append(h("div", { class: "card demo", "aria-hidden": "true" },
@@ -892,7 +922,15 @@
           btn("Create a demo", { cls: "btn-primary btn-lg", icon: "i-rocket", href: "#/new" })));
       return;
     }
-    for (const d of items) grid.append(demoCard(d));
+    const one = view === "list" ? demoRow : demoCard;
+    if (!grouped()) { for (const d of items) grid.append(one(d)); return; }
+    const groups = new Map();
+    for (const d of items) { const k = d.client || ""; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(d); }
+    for (const k of Array.from(groups.keys()).sort(byClient)) {
+      const ds = groups.get(k);
+      grid.append(h("h2", { class: "group-head" + (k ? "" : " none") }, h("span", { text: k || "No client" }), h("span", { class: "group-count", text: String(ds.length) })));
+      for (const d of ds) grid.append(one(d));
+    }
   }
 
   function lifecycleTrack(d) {
@@ -926,12 +964,11 @@
       h("div", { class: "meter" + (n <= 3 ? " crit" : n <= 7 ? " warn" : "") }, h("i", { style: { width: pct + "%" } })));
   }
 
-  function demoCard(d) {
-    const cat = category(d);
+  // The pieces a demo card and a list row share.
+  function demoParts(d) {
     const url = safeHttps(d.url);
     const me = myEmail();
     const sub = [];
-    if (d.client) sub.push(h("span", { class: "tag client", text: d.client }));
     if (d.permanent) sub.push(h("span", { class: "tag permanent", title: "Pinned by an admin: never expires, can't be destroyed", text: "Permanent" }));
     if (d.owner) sub.push(h("span", { class: "demo-owner", title: d.owner, text: d.owner.toLowerCase() === me ? "You" : d.owner }));
 
@@ -948,27 +985,58 @@
     const logs = buildFailed(d)
       ? btn("Build log", { cls: "btn-sm btn-ghost", icon: "i-terminal", href: "#/demo/" + encodeURIComponent(d.name) + "?tab=build" })
       : btn("Logs", { cls: "btn-sm btn-ghost", icon: "i-terminal", href: "#/demo/" + encodeURIComponent(d.name) + "?tab=logs" });
-
+    const cat = category(d);
     const stage = stageText(d);
-    const card = h("article", { class: "card demo", tabindex: "0", "aria-label": d.name + ", " + statusLabel(d) },
-      h("div", { class: "demo-top" },
-        h("div", { class: "demo-mark " + (cat === "live" ? "" : cat), text: d.name.slice(0, 2) }),
-        h("div", { class: "demo-id" }, h("div", { class: "demo-name", title: d.name, text: d.name }), h("div", { class: "demo-sub" }, sub)),
-        h("span", { class: "pill " + cat, text: statusLabel(d) })),
-      h("div", { class: "demo-url" }, icon("i-globe", "icon-s"),
+    return {
+      cat, sub, kebab, primary, logs,
+      // Project and client on one line; a long name is cut before the client.
+      title: h("div", { class: "demo-title" }, h("div", { class: "demo-name", title: d.name, text: d.name }),
+        d.client ? h("span", { class: "tag client", text: d.client }) : null),
+      mark: h("div", { class: "demo-mark " + (cat === "live" ? "" : cat), text: d.name.slice(0, 2) }),
+      pill: h("span", { class: "pill " + cat, text: statusLabel(d) }),
+      link: h("div", { class: "demo-url" }, icon("i-globe", "icon-s"),
         url ? h("a", { href: url, target: "_blank", rel: "noopener noreferrer", text: url.replace(/^https:\/\//, "") }) : h("span", { class: "none", text: "No address yet" }),
         url ? h("button", { class: "iconbtn", type: "button", "aria-label": "Copy link", title: "Copy link", onclick: (e) => { e.stopPropagation(); copy(url, "Link copied"); } }, icon("i-copy", "icon-s")) : null),
-      d.notes ? h("div", { class: "demo-notes", title: d.notes, text: d.notes }) : null,
-      lifecycleTrack(d),
-      stage ? h("div", { class: "stage-line" }, cat === "busy" ? icon("i-refresh", "icon-s spin") : icon(cat === "fail" ? "i-alert" : "i-info", "icon-s"), h("span", { text: stage })) : null,
-      d.status === "RUNNING" ? expiryBlock(d) : null,
-      h("div", { class: "demo-foot" }, primary, logs,
-        typeof d.monthlyCost === "number" ? h("span", { class: "demo-cost", title: "Estimated cost at list prices", text: "~" + money(d.monthlyCost) + "/mo" }) : null,
-        h("div", { class: "demo-kebab" }, kebab)));
+      stage: stage ? h("div", { class: "stage-line" }, cat === "busy" ? icon("i-refresh", "icon-s spin") : icon(cat === "fail" ? "i-alert" : "i-info", "icon-s"), h("span", { text: stage })) : null,
+      cost: typeof d.monthlyCost === "number" ? h("span", { class: "demo-cost", title: "Estimated cost at list prices", text: "~" + money(d.monthlyCost) + "/mo" }) : null,
+    };
+  }
+  // Click or Enter anywhere outside a control opens the demo's drawer.
+  function openable(card, d) {
     const open = () => { S.lastFocus = card; go("demo/" + encodeURIComponent(d.name)); };
     card.addEventListener("click", (e) => { if (!e.target.closest("a,button,.menu")) open(); });
     card.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target === card) open(); });
     return card;
+  }
+
+
+  function demoCard(d) {
+    const p = demoParts(d);
+    const card = h("article", { class: "card demo", tabindex: "0", "aria-label": d.name + ", " + statusLabel(d) },
+      h("div", { class: "demo-top" }, p.mark, h("div", { class: "demo-id" }, p.title, h("div", { class: "demo-sub" }, p.sub)), p.pill),
+      p.link,
+      d.notes ? h("div", { class: "demo-notes", title: d.notes, text: d.notes }) : null,
+      lifecycleTrack(d),
+      p.stage,
+      d.status === "RUNNING" ? expiryBlock(d) : null,
+      h("div", { class: "demo-foot" }, p.primary, p.logs, p.cost, h("div", { class: "demo-kebab" }, p.kebab)));
+    return openable(card, d);
+  }
+
+  // List view: one compact row per demo; the busy stage line stands in for the lifecycle track.
+  function demoRow(d) {
+    const p = demoParts(d);
+    const n = daysLeft(d.expiresAt);
+    const left = d.permanent ? "Permanent" : d.status !== "RUNNING" || n === null ? "" : n > 1 ? n + " days left" : n === 1 ? "1 day left" : "Expires today";
+    const row = h("article", { class: "card demo-row", tabindex: "0", "aria-label": d.name + ", " + statusLabel(d) },
+      p.mark,
+      h("div", { class: "demo-id" }, p.title, h("div", { class: "demo-sub" }, p.sub), p.stage),
+      p.pill,
+      p.link,
+      h("span", { class: "row-left" + (!d.permanent && n !== null && n <= 7 ? " warn" : ""), text: left }),
+      p.cost || h("span", { class: "demo-cost" }),
+      h("div", { class: "row-actions" }, p.primary, h("div", { class: "demo-kebab" }, p.kebab)));
+    return openable(row, d);
   }
 
   function demoMenu(d) {
@@ -977,6 +1045,7 @@
       { icon: "i-info", label: "View details", run: () => go("demo/" + n) },
       { icon: "i-terminal", label: "App logs", run: () => go("demo/" + n + "?tab=logs") },
       { icon: "i-terminal", label: "Build log", run: () => go("demo/" + n + "?tab=build") },
+      { icon: "i-chart", label: "Metrics", run: () => go("demo/" + n + "?tab=metrics") },
       (s === "CONFIGURED" || s === "FAILED") && canDeploy(d) ? { icon: "i-rocket", label: "Deploy", run: () => runAction("create", d.name) } : null,
       s === "RUNNING" && canDeploy(d) ? { icon: "i-redo", label: "Redeploy latest commit", run: () => runAction("redeploy", d.name) } : null,
       s === "RUNNING" && !d.permanent ? { icon: "i-calendar", label: "Extend 30 days", run: () => runAction("extend", d.name) } : null,
@@ -1082,12 +1151,17 @@
       if (s === "RUNNING" && isAdmin()) { const b = btn(d.permanent ? "Unpin" : "Make permanent", { icon: "i-pin" }); b.addEventListener("click", () => runAction(d.permanent ? "unpin" : "pin", D.name, b)); acts.append(b); }
       if (s !== "DESTROYING" && mine) acts.append(btn("Edit settings", { icon: "i-edit", href: "#/edit/" + encodeURIComponent(D.name) }));
       const rb = btn("", { cls: "btn-ghost btn-icon", icon: "i-refresh", aria: "Refresh", title: "Refresh" });
-      rb.addEventListener("click", async () => { rb.querySelector("svg").classList.add("spin"); await loadDrawer(); if (S.drawer && isLogTab(S.drawer.tab)) loadLogs(); });
+      rb.addEventListener("click", async () => {
+        rb.querySelector("svg").classList.add("spin");
+        await loadDrawer();
+        if (S.drawer && isLogTab(S.drawer.tab)) loadLogs();
+        if (S.drawer && S.drawer.tab === "metrics") loadMetrics();
+      });
       acts.append(rb);
     }
     head.append(acts);
     if (!missing) {
-      head.append(h("div", { class: "tabs", role: "tablist" }, [["overview", "Overview"], ["logs", "App logs"], ["build", "Build log"], ["settings", "Settings"]].map(([id, label]) =>
+      head.append(h("div", { class: "tabs", role: "tablist" }, [["overview", "Overview"], ["logs", "App logs"], ["build", "Build log"], ["metrics", "Metrics"], ["settings", "Settings"]].map(([id, label]) =>
         h("button", { type: "button", role: "tab", "aria-selected": D.tab === id ? "true" : "false", text: label, onclick: () => setTab(id) }))));
     }
   }
@@ -1109,6 +1183,7 @@
     }
     if (!D.r.ok) { body.append(h("div", { class: "alert alert-err" }, icon("i-alert"), h("div", { class: "alert-body", text: errText(D.r) }))); return; }
     if (isLogTab(D.tab)) renderLogsTab(body);
+    else if (D.tab === "metrics") renderMetricsTab(body);
     else if (D.tab === "settings") renderSettingsTab(body);
     else renderOverviewTab(body);
   }
@@ -1163,6 +1238,7 @@
       ["Est. cost", !d.cost ? "" : d.cost.billing
         ? "About " + money(d.cost.monthly) + "/month (" + money(d.cost.daily) + "/day) · " + money(d.cost.soFar) + " so far"
         : "Nothing yet · about " + money(d.cost.monthly) + "/month once live"],
+      ["Requests", d.requests ? count(d.requests.total) + " total" : ""],
       ["Commit", d.commitSha ? h("code", { text: d.commitSha.slice(0, 12) }) : ""],
       ["Created", d.createdAt ? fmtDateTime(d.createdAt) : ""],
       ["First live", d.firstLiveAt ? fmtDateTime(d.firstLiveAt) : ""],
@@ -1202,6 +1278,47 @@
         : h("div", { class: "danger-zone" }, h("h3", { text: "Danger zone" }),
           h("p", { text: "Destroying deletes the service and images for good. The name becomes free for anyone." }), destroy),
     ]);
+  }
+
+  // Requests from the load balancer's per-demo metrics (ADR 028). Fetched when the tab first opens and on Refresh,
+  // not on the 10-second status poll.
+  async function loadMetrics() {
+    const D = S.drawer;
+    if (!D || D.metricsLoading) return;
+    D.metricsLoading = true;
+    const r = await api({ action: "metrics", name: D.name });
+    if (S.drawer !== D) return;
+    D.metrics = r;
+    D.metricsLoading = false;
+    if (D.tab === "metrics") renderDrawerBody();
+  }
+
+  function renderMetricsTab(body) {
+    const D = S.drawer;
+    if (!D.metrics) {
+      loadMetrics();
+      body.append(h("div", { class: "bone l3" }), h("div", { class: "bone l3" }), h("div", { class: "bone l3" }));
+      return;
+    }
+    const r = D.metrics, m = r.data || {};
+    if (!r.ok) { body.append(h("div", { class: "alert alert-err" }, icon("i-alert"), h("div", { class: "alert-body", text: errText(r) }))); return; }
+    if (!m.requests) {
+      body.append(h("div", { class: "empty" }, h("div", { class: "empty-art" }, logoMark()),
+        h("h2", { text: "No request data yet" }), h("p", { text: "It appears once the demo is live and has had visitors." })));
+      return;
+    }
+    const q = m.requests, c = m.codes || {}, lat = m.latencyMs;
+    body.append(kv([
+      ["Last hour", count(q["1h"])],
+      ["Last 24 hours", count(q["24h"])],
+      ["Last 7 days", count(q["7d"])],
+      ["Total", count(q.total) + (m.since ? " since " + fmtDate(m.since) : "")],
+      ["2xx · 4xx", count(c["2xx"]) + " · " + count(c["4xx"])],
+      ["App 5xx", count(c["5xx"])],
+      ["Response p50 · p95", lat ? lat.p50 + " ms · " + lat.p95 + " ms (24 hours)" : "No requests in the last 24 hours"],
+      ["Last request", m.lastRequestAt ? fmtDateTime(m.lastRequestAt) + " (" + fmtRel(m.lastRequestAt) + ")" : "None yet"],
+      ["As of", m.asOf ? fmtDateTime(m.asOf) : ""],
+    ]), h("p", { class: "hint mt-16", text: "Counted by the load balancer, about 2 minutes behind. These are requests, not unique visitors. App 5xx are your app's own errors; the load balancer's 502/503/504 when no container answers are not included." }));
   }
 
   // Two log views share the terminal: the running app's logs and the latest build's log (ADR 022).
@@ -1831,6 +1948,8 @@
     ["How many demos can I run?", "Five active demos per person (25 for sales, 50 for elite and admins); ask a Lilypad admin if you need the sales or elite role. Destroy one to free a slot. Demos an admin made permanent don't count."],
     ["Who can open or manage my demo?", "Anyone with the link can open the app itself, so add your own login if it needs one. Only you and Lilypad admins can see its status, app logs and build log, deploy or redeploy it, extend it or destroy it. Only you can change its settings."],
     ["Where is my key kept?", "In this browser's local storage. Sign out removes it. Requesting a new key replaces the old one everywhere."],
+    ["How do I sort or group demos?", "Use the toolbar above the demos: Sort picks project name, client or status, Group by client splits them under each client (demos with no client come last), and the two buttons switch between cards and a compact list. Your choice is remembered in this browser."],
+    ["Is anyone using my demo?", "Open the demo's Metrics tab: requests in the last hour, day, week and in total, how many succeeded (2xx), were client errors (4xx) or app errors (5xx), response time and the last request. The Overview shows the total. It's about 2 minutes behind and counts requests, not people: one visit loads many files."],
     ["What does a demo cost?", "Status and the dashboard show an estimate from the demo's size at AWS list prices, running all day: tiny is about $14 a month, large about $77. It counts from when the demo first went live, at its current size, and leaves out the shared platform. Destroy demos you no longer need."],
     ["Keyboard shortcuts?", "/ search · n new demo · r refresh · ? help · Esc closes panels and menus."],
   ];

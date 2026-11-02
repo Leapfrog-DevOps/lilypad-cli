@@ -30,6 +30,21 @@ class H(BaseHTTPRequestHandler):
             cause = "Deployment failed | container: Task failed ELB health checks; app: exit code 1"
             reply.update(message="faildemo: FAILED\nLast failure: " + cause,
                          data={"name": "faildemo", "status": "FAILED", "lastFailure": cause})
+        elif code == 200 and req.get("name") == "busydemo" and req.get("action") == "metrics":
+            reply.update(message="*busydemo*: requests\n1h: 12  24h: 340  7d: 2,104  Total: 5,412 (since 2026-10-01)",
+                         data={"name": "busydemo", "since": "2026-10-01T00:00:00Z", "asOf": "2026-10-28T12:00:00Z",
+                               "requests": {"1h": 12, "24h": 340, "7d": 2104, "total": 5412},
+                               "codes": {"2xx": 5180, "4xx": 201, "5xx": 31},
+                               "latencyMs": {"p50": 42, "p95": 310}, "lastRequestAt": "2026-10-28T09:00:00Z"})
+        elif code == 200 and req.get("action") == "list":
+            # Demos across two clients and none, for the web dashboard's sort and grouping.
+            row = lambda name, client, status, days: {
+                "name": name, "client": client, "status": status, "owner": "you@example.com",
+                "url": "https://" + name + ("-" + client if client else "") + ".demo.example.com",
+                "expiresAt": "2026-12-%02dT00:00:00Z" % days, "monthlyCost": 9.12 if status == "RUNNING" else None}
+            reply.update(data=[row("busydemo", "acme", "RUNNING", 20), row("shop", "globex", "RUNNING", 3),
+                               row("alpha", "acme", "BUILDING", 25), row("faildemo", "", "FAILED", 10),
+                               row("zeta", "", "RUNNING", 28)])
         elif code == 200 and req.get("name") == "faildemo" and req.get("action") == "redeploy":
             reply.update(message="Redeploy started for faildemo (from FAILED: builds and creates it again).")
         out = json.dumps(reply).encode()

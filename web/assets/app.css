@@ -310,19 +310,45 @@ kbd { font-size: 12px; background: var(--surface); border: 1px solid var(--line-
 .refresh-box .label { font-size: 12.5px; color: var(--ink-3); font-weight: 600; display: inline-flex; gap: 6px; align-items: center; }
 .toolbar .refresh-box .select-sm { border: 0; box-shadow: none; background-color: transparent; width: auto; min-width: 0; height: 30px; font-weight: 600; background-position: calc(100% - 15px) 12px, calc(100% - 10px) 12px; }
 .updated { font-size: 12.5px; color: var(--ink-4); }
+.seg { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--line-2); border-radius: var(--radius-s); background: var(--surface); }
+.seg .btn { --b-bg: transparent; --b-line: transparent; --b-ink: var(--ink-3); }
+.toolbar > .seg-btn { height: 38px; --b-ink: var(--ink-3); }
+.seg-btn[aria-pressed="true"] { --b-bg: var(--violet-soft); --b-ink: var(--violet-ink); --b-line: transparent; }
 
 /* ---------- demo cards ---------- */
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 16px; }
 .demo { position: relative; min-width: 0; display: flex; flex-direction: column; padding: 18px 18px 14px; cursor: pointer; transition: box-shadow .2s var(--ease), border-color .2s, transform .2s var(--ease); }
 .demo:hover { box-shadow: var(--shadow-2); border-color: var(--line-2); transform: translateY(-1px); }
 .demo:focus-visible { box-shadow: var(--focus), var(--shadow-2); }
-.demo.menu-open { z-index: 5; }
+.demo.menu-open, .demo-row.menu-open { z-index: 5; }
+.group-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; margin: 10px 0 -4px; font-size: 13px; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-2); }
+.group-head:first-child { margin-top: 0; }
+.group-head.none { color: var(--ink-4); }
+.group-count { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; display: inline-grid; place-items: center; font-size: 11.5px; letter-spacing: 0; background: var(--surface-2); color: var(--ink-3); }
+.list { display: flex; flex-direction: column; gap: 8px; }
+.list .group-head { margin-top: 14px; margin-bottom: 0; }
+.list .group-head:first-child { margin-top: 0; }
+.demo-row { position: relative; display: grid; grid-template-columns: 40px minmax(160px, 1.2fr) 108px minmax(200px, 1.6fr) 96px 76px 190px; align-items: center; gap: 14px; padding: 12px 14px; cursor: pointer; min-width: 0; transition: box-shadow .2s var(--ease), border-color .2s; }
+.demo-row:hover { box-shadow: var(--shadow-2); border-color: var(--line-2); }
+.demo-row:focus-visible { box-shadow: var(--focus), var(--shadow-2); }
+.demo-row .demo-url { margin: 0; }
+.demo-row > .pill { justify-self: start; }
+.demo-row .demo-sub { margin-top: 2px; }
+.demo-row .stage-line { margin: 4px 0 0; }
+.demo-row .demo-cost { margin-left: 0; text-align: right; }
+.row-left { font-size: 12.5px; color: var(--ink-3); white-space: nowrap; }
+.row-left.warn { color: var(--warn); font-weight: 650; }
+.row-actions { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+.row-actions .demo-kebab { margin-left: 0; }
 .demo-top { display: flex; align-items: flex-start; gap: 12px; }
 .demo-mark { width: 40px; height: 40px; border-radius: 10px; flex: none; display: grid; place-items: center; font-weight: 800; font-size: 16px; color: var(--primary-soft-ink); background: var(--primary-soft); text-transform: uppercase; }
 .demo-mark.fail { color: var(--danger); background: var(--danger-soft); }
 .demo-mark.busy { color: var(--info); background: var(--info-soft); }
 .demo-mark.idle { color: var(--ink-3); background: var(--surface-2); }
 .demo-id { min-width: 0; flex: 1; }
+.demo-title { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 26px; }
+.demo-title .demo-name { min-width: 0; }
+.demo-title .tag { flex: none; }
 .demo-name { font-size: 16.5px; font-weight: 750; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* One line, always present, so every card's header is the same height; a long owner is cut first. */
 .demo-sub { font-size: 12.5px; color: var(--ink-3); margin-top: 3px; display: flex; gap: 6px; align-items: center; min-height: 20px; min-width: 0; white-space: nowrap; overflow: hidden; }
@@ -341,7 +367,8 @@ kbd { font-size: 12px; background: var(--surface); border: 1px solid var(--line-
 .demo-cost { margin-left: auto; font-size: 12.5px; color: var(--ink-3); white-space: nowrap; }
 .demo-cost + .demo-kebab { margin-left: 0; }
 .tag { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: 5px; font-size: 11.5px; font-weight: 650; background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--line); }
-.tag.client { background: var(--violet-soft); color: var(--violet-ink); border-color: transparent; }
+/* Same size as the project name, so the client reads as part of the demo's identity. */
+.tag.client { background: var(--violet-soft); color: var(--violet-ink); border-color: transparent; font-size: 16.5px; font-weight: 700; height: 26px; padding: 0 9px; letter-spacing: -.01em; }
 .tag.permanent { background: var(--primary-soft); color: var(--primary-soft-ink); border-color: transparent; }
 .tag.admin, .tag.sales, .tag.elite { background: var(--lf-gold); color: var(--lf-abyss); border-color: transparent; text-transform: uppercase; letter-spacing: .05em; font-size: 10.5px; }
 .tag.sales { background: var(--lf-mint); }
@@ -607,6 +634,8 @@ div.notes-full { margin: 0; padding: 12px 14px; background: var(--surface-2); bo
 
 /* ---------- responsive ---------- */
 @media (max-width: 1080px) {
+  .demo-row { grid-template-columns: 40px minmax(140px, 1fr) 108px minmax(160px, 1.2fr) 190px; }
+  .demo-row .row-left, .demo-row .demo-cost { display: none; }
   .stats { grid-template-columns: repeat(2, 1fr); }
   .help-grid { grid-template-columns: 1fr 1fr; }
   .choice-grid { grid-template-columns: repeat(2, 1fr); }
@@ -636,6 +665,10 @@ div.notes-full { margin: 0; padding: 12px 14px; background: var(--surface-2); bo
   .stat { padding: 12px 14px; }
   .stat-ico { display: none; }
   .form-grid, .review, .help-grid, .grid { grid-template-columns: 1fr; }
+  .demo-row { grid-template-columns: 40px minmax(0, 1fr) auto; gap: 8px 12px; }
+  .demo-row .demo-url { grid-column: 1 / 3; }
+  .demo-row > .pill { justify-self: end; }
+  .demo-row .row-left, .demo-row .demo-cost { display: none; }
   .set-row { grid-template-columns: 1fr; gap: 10px; padding: 18px; }
   .kv { grid-template-columns: 1fr; }
   .kv dt { border-bottom: 0; padding-bottom: 2px; }

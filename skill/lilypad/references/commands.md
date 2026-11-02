@@ -11,9 +11,10 @@
 | `lilypad create <name>` (alias `deploy`) | Builds repo, creates stack. Async. | Creator or admin |
 | `lilypad setup --sample` | Prints a documented sample conf file (`> demoproject.conf`). Local only. | Local |
 | `lilypad redeploy <name>` | Rebuilds latest commit, rolls service, applies `setup` edits; also retries a FAILED demo (builds and creates it again). Async. | Creator or admin |
-| `lilypad status <name>` | State, URL, owner, commit, size, expiry, estimated cost (`data.cost`: monthly, daily, soFar), task counts, settled flag; a failed demo adds a `Last failure:` line (`data.lastFailure`) with the cause. | Creator or admin |
+| `lilypad status <name>` | State, URL, owner, commit, size, expiry, estimated cost (`data.cost`: monthly, daily, soFar), total requests (`data.requests`: total, since; null before deploy), task counts, settled flag; a failed demo adds a `Last failure:` line (`data.lastFailure`) with the cause. | Creator or admin |
 | `lilypad logs <name> [lines]` | The running app's container logs. Default 50, max 500. | Creator or admin |
 | `lilypad build-logs <name> [lines]` | The latest build's log (running, succeeded or failed) and its status. Default 50, max 500. | Creator or admin |
+| `lilypad metrics <name>` | Requests from the load balancer: `data.requests` (`1h`, `24h`, `7d`, `total`), `codes` (`2xx`, `4xx`, `5xx` app errors only), `latencyMs` (`p50`, `p95` over 24h, null with no traffic), `lastRequestAt` (null if none), `since`, `asOf`. No `requests` key before the demo is deployed. ~2 min lag; requests, not unique visitors. | Creator or admin |
 | `lilypad extend <name>` | Expiry = now + 30 days; 90-day lifetime cap. Async. | Creator or admin |
 | `lilypad destroy <name>` | Deletes stack and images. Irreversible. Async. Refused (409) for a pinned demo. | Creator or admin |
 | `lilypad pin <name>` / `lilypad unpin <name>` | Permanent: no expiry, not destroyable, not counted toward cap; redeploy keeps it. `unpin` = back to 30 days. RUNNING only. Async. | Admin |

@@ -17,6 +17,7 @@
 #   lilypad create|redeploy|status|extend|destroy <name>   (deploy = create)
 #   lilypad logs <name> [lines]               app (container) logs; default 50, max 500
 #   lilypad build-logs <name> [lines]         latest build log, running or finished; default 50, max 500
+#   lilypad metrics <name>                    requests (1h, 24h, 7d, total), 2xx/4xx/5xx, response time
 #   lilypad pin|unpin <name>                  admins: make permanent (no expiry, not destroyable), or undo
 #   lilypad '<json>' | lilypad -            raw JSON body (JSON as an argument, or on stdin)
 #   lilypad <command> --help                  what a command does and the options it takes
@@ -24,10 +25,10 @@
 # Key: $LILYPAD_KEY, else ~/.config/lilypad/key. URL: $LILYPAD_URL, else ~/.config/lilypad/url.
 set -euo pipefail
 
-VERSION="1.2.0"
+VERSION="1.3.0"
 
 usage() {
-  sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//' >&2
+  sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//' >&2
   exit 2
 }
 
@@ -101,6 +102,7 @@ Demos are deleted after 30 days.
 
 9. Lifecycle
       lilypad list                 # your demos, any status but destroyed
+      lilypad metrics acme-poc     # is anyone using it? requests, errors, last visit
       lilypad extend acme-poc      # expiry = now + 30 days (90 days total at most)
       lilypad destroy acme-poc     # permanent; the name is free for anyone afterwards
    A warning email arrives on day 27. At most 5 active demos per person (25 for sales, 50 for elite and admins).
@@ -351,7 +353,7 @@ EOT
 lilypad status <name>
 
 Show state (BUILDING, DEPLOYING, RUNNING, ...), URL, owner, commit, size, expiry, estimated cost
-(per month and so far, at list prices), task counts and whether it has settled. Read the text alone with:  lilypad status <name> | jq -r .message
+(per month and so far, at list prices), total requests, task counts and whether it has settled. Read the text alone with:  lilypad status <name> | jq -r .message
 A failed demo shows `Last failure:` with the cause (for example failed health checks).
 Creator or admin.
 
@@ -377,6 +379,19 @@ Logs are kept 7 days.
 
   <name>    the demo name
   [lines]   how many lines. Default: 50, max: 500
+EOT
+      ;;
+    metrics) cat <<'EOT'
+lilypad metrics <name>
+
+Requests the demo's address received in the last hour, 24 hours, 7 days and in total,
+how many were 2xx, 4xx and app 5xx, response time p50/p95 over 24 hours, and the last request.
+Counted by the load balancer; data lags about 2 minutes. Requests, not unique visitors.
+App 5xx are the app's own errors, not the load balancer's 502/503/504 when no container answers.
+Read the text alone with:  lilypad metrics <name> | jq -r .message
+Creator or admin.
+
+  <name>    the demo name
 EOT
       ;;
     extend) cat <<'EOT'
@@ -528,7 +543,7 @@ case "$action" in
     need_jq
     body="$(jq -nc --arg c "$client" '{action: "list"} + (if $c == "" then {} else {args: {client: $c}} end)')"
     ;;
-  create | redeploy | status | extend | destroy | pin | unpin)
+  create | redeploy | status | metrics | extend | destroy | pin | unpin)
     [ $# -eq 1 ] || usage
     need_jq
     body="$(jq -nc --arg a "$action" --arg n "$1" '{action: $a, name: $n}')"

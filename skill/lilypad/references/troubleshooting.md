@@ -25,6 +25,8 @@
 | status: `Last failure: ... Task failed ELB health checks` | The app never answered the health path. Check `--port` matches the container port and `--health` returns 200-399 without a login; `lilypad logs <name> 200`. Fix it, rerun `setup` with every option if config changed, then `redeploy`. |
 | status: `Last failure: ... exit code N` | The app crashed at start. `lilypad logs <name> 200` (the first line repeats the cause) shows why; fix and `redeploy`. |
 | Build failed (status FAILED, no image) | `lilypad build-logs <name> 200` shows the clone and docker build output; `logs` is empty because the app never started. Logs are kept 7 days. |
+| metrics: all zero, or `No request data` | Data is about 2 minutes behind; open the URL and retry. `No request data` means the demo has no load balancer target yet (never deployed, or destroyed). |
+| metrics: 5xx is 0 but the demo returned 502/503 | Those come from the load balancer when no container answers, and are not counted per demo. Check `status` (task counts) and `lilypad logs <name> 200`. |
 | Env vars vanished after edit | `setup` replaces whole config; rerun with `--env-file` again. |
 | 6th demo refused | Cap is 5 active demos per person (25 for sales, 50 for elite and admins). Destroy one, or ask a Lilypad admin about the sales or elite role. |
 

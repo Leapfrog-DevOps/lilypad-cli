@@ -1,6 +1,6 @@
 ---
 name: lilypad
-description: Deploy and manage disposable demos on the Lilypad self-serve demo platform with the installed `lilypad` CLI. Use when the user wants to turn a GitHub repo into a live demo, or to authenticate, set up, create, redeploy, check status, read app or build logs, extend, list or destroy a Lilypad demo, or mentions Lilypad, an `lpk_` key, or `lilypad` commands.
+description: Deploy and manage disposable demos on the Lilypad self-serve demo platform with the installed `lilypad` CLI. Use when the user wants to turn a GitHub repo into a live demo, or to authenticate, set up, create, redeploy, check status, read app or build logs, see request metrics, extend, list or destroy a Lilypad demo, or mentions Lilypad, an `lpk_` key, or `lilypad` commands.
 ---
 
 # Lilypad
@@ -77,7 +77,8 @@ lilypad whoami
 3. `lilypad create <name>` (alias `deploy`). Async. Then poll `lilypad status <name> | jq -r .message` about once a minute. BUILDING 3-5 min, DEPLOYING 2-5 min, then RUNNING with `Settled: yes`. Give the user the URL.
 4. Changes: edit the conf file (or repeat all `setup` options) and rerun `setup`, then `lilypad redeploy <name>`.
 5. Other: `lilypad logs <name> [lines]` (the running app's container logs) and `lilypad build-logs <name> [lines]` (the latest build: clone, docker build, push; running or finished), both default 50, max 500, kept 7 days; `lilypad extend <name>` (now + 30 days, 90-day lifetime cap), `lilypad list [--client C]`, `lilypad destroy <name>`, admin-only `lilypad pin|unpin <name>` (permanent: no expiry, not destroyable).
-6. Cost: `status` shows the demo's estimated cost (`Cost:` line, `data.cost`: per month, per day and so far since it first went live, at list prices); `list` shows it per live demo plus a total. Quote it when the user asks what a demo costs; it is an estimate and leaves out the shared platform.
+6. Usage: `lilypad metrics <name>` shows requests in the last hour, 24 hours, 7 days and in total, 2xx/4xx/app 5xx, response time p50/p95 over 24 hours and the last request (`data.requests`, `codes`, `latencyMs`, `lastRequestAt`); `status` shows only the total (`Requests:` line, `data.requests.total`). Use it when the user asks whether a demo is being used. About 2 minutes behind, counts requests not visitors, and app 5xx leave out the load balancer's own 502/503/504.
+7. Cost: `status` shows the demo's estimated cost (`Cost:` line, `data.cost`: per month, per day and so far since it first went live, at list prices); `list` shows it per live demo plus a total. Quote it when the user asks what a demo costs; it is an estimate and leaves out the shared platform.
 
 Name rule: `^[a-z][a-z0-9-]{1,22}[a-z0-9]$` (3-24 chars). Reserved: www, api, admin, app, mail, status, help, test, core, dns.
 Client rule (optional): `^[a-z0-9]([a-z0-9-]{0,18}[a-z0-9])?$` (1-20 chars). Commands still take the name, not `name-client`.
@@ -88,7 +89,7 @@ Defaults: branch `main`, port `8080`, health `/` (must return 200-399 without lo
 
 - **Confirm before `destroy`** (irreversible), before `redeploy` on someone's live demo, before an admin's `create`/`redeploy` of a demo they don't own (name the owner from `status`), and before `create`/`redeploy` of a name the user has not named explicitly.
 - `create`, `redeploy`, `extend`, `destroy` are async: reply "accepted" only. Verify with `status`. Do not claim success until `status` shows RUNNING / DESTROYED and `Settled: yes`.
-- Only the creator may `setup` (existing). Creator or admin may `create`, `redeploy`, `status`, `logs`, `build-logs`, `extend`, `destroy`; when an admin deploys someone else's demo, the creator gets a note. Max 5 active demos per person (25 for sales, 50 for elite and admins); `whoami` shows the role and cap.
+- Only the creator may `setup` (existing). Creator or admin may `create`, `redeploy`, `status`, `logs`, `build-logs`, `metrics`, `extend`, `destroy`; when an admin deploys someone else's demo, the creator gets a note. Max 5 active demos per person (25 for sales, 50 for elite and admins); `whoami` shows the role and cap.
 - Env vars via `--env-file` are visible to the platform operators: no real secrets. 
 - Platform adds no auth to demos. App's own job.
 - Email arrives once per create/redeploy outcome and a reminder 3 days before expiry.
