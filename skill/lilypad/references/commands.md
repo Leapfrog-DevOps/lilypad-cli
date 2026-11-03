@@ -15,6 +15,7 @@
 | `lilypad logs <name> [lines]` | The running app's container logs. Default 50, max 500. | Creator or admin |
 | `lilypad build-logs <name> [lines]` | The latest build's log (running, succeeded or failed) and its status. Default 50, max 500. | Creator or admin |
 | `lilypad metrics <name>` | Requests from the load balancer: `data.requests` (`1h`, `24h`, `7d`, `total`), `codes` (`2xx`, `4xx`, `5xx` app errors only), `latencyMs` (`p50`, `p95` over 24h, null with no traffic), `lastRequestAt` (null if none), `since`, `asOf`. No `requests` key before the demo is deployed. ~2 min lag; requests, not unique visitors. | Creator or admin |
+| `lilypad shared <name>` | The repo's `SHARED.md` as the last successful deploy captured it: `message` is the markdown itself, `data.markdown`, `sha`, `commit`, `capturedAt` (all "" when the repo has none; `message` then says where to add one). Read-only. `status` carries only `data.hasShared`. | Creator or admin |
 | `lilypad extend <name>` | Expiry = now + 30 days; 90-day lifetime cap. Async. | Creator or admin |
 | `lilypad destroy <name>` | Deletes stack and images. Irreversible. Async. Refused (409) for a pinned demo. | Creator or admin |
 | `lilypad pin <name>` / `lilypad unpin <name>` | Permanent: no expiry, not destroyable, not counted toward cap; redeploy keeps it. `unpin` = back to 30 days. RUNNING only. Async. | Admin |

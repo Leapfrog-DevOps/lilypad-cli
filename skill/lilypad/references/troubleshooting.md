@@ -27,6 +27,7 @@
 | Build failed (status FAILED, no image) | `lilypad build-logs <name> 200` shows the clone and docker build output; `logs` is empty because the app never started. Logs are kept 7 days. |
 | metrics: all zero, or `No request data` | Data is about 2 minutes behind; open the URL and retry. `No request data` means the demo has no load balancer target yet (never deployed, or destroyed). |
 | metrics: 5xx is 0 but the demo returned 502/503 | Those come from the load balancer when no container answers, and are not counted per demo. Check `status` (task counts) and `lilypad logs <name> 200`. |
+| shared: "No SHARED.md" after adding one | It is read only by a successful build: `lilypad redeploy <name>`. Check it is named exactly `SHARED.md`, at the repo root, on the branch the demo deploys, and a regular file (a symlink is ignored). Over 32 KB is cut, with a note at the end. |
 | Env vars vanished after edit | `setup` replaces whole config; rerun with `--env-file` again. |
 | 6th demo refused | Cap is 5 active demos per person (25 for sales, 50 for elite and admins). Destroy one, or ask a Lilypad admin about the sales or elite role. |
 

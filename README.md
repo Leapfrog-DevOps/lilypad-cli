@@ -18,7 +18,7 @@ Windows (PowerShell, no Git Bash or WSL needed):
 irm https://raw.githubusercontent.com/Leapfrog-DevOps/lilypad-cli/main/install.ps1 | iex
 ```
 
-Pin a release instead of `main`: `LILYPAD_VERSION=v1.3.0` before the command (`$env:LILYPAD_VERSION='v1.3.0'` in PowerShell).
+Pin a release instead of `main`: `LILYPAD_VERSION=v1.4.0` before the command (`$env:LILYPAD_VERSION='v1.4.0'` in PowerShell).
 
 Running `./install.sh` (or `.\install.ps1`) from a clone installs the local files; nothing is downloaded.
 
@@ -39,7 +39,10 @@ lilypad setup acme-poc --repo https://github.com/<org>/<repo> --port 3000 --heal
 lilypad create acme-poc
 lilypad status acme-poc   # also shows the estimated cost: per month and so far, and total requests
 lilypad metrics acme-poc  # requests (1h, 24h, 7d, total), 2xx/4xx/5xx, response time, last request
+lilypad shared acme-poc   # the repo's SHARED.md notes (see below)
 ```
+
+**SHARED.md (optional).** Put a file named `SHARED.md` at the root of the repo, on the branch you deploy: logins, a walkthrough, known issues. Lilypad picks it up on every successful deploy or redeploy (up to 32 KB) and shows it to the demo's creator and Lilypad admins only: in the web client's **Shared** tab, with `lilypad shared <name>` (`| jq -r .message` prints the file) and with `/lilypad shared <name>` in Slack. People who open the demo's URL never see it. Markdown works (headings, lists, code, tables, https links); HTML shows as plain text and images show as links. No file means no notes and no error. Edits show after the next redeploy; the notes are deleted when the demo is destroyed. Don't put anything in it you wouldn't post in a team Slack channel.
 
 Optional client: `lilypad setup shop --client acme --repo ...` serves the demo at `<name>-<client>` (`shop-acme`) and tags it `Client=acme`. The demo is still addressed by its name (`lilypad status shop`). The client can change until the first deploy and is fixed after that. `lilypad list --client acme` shows one client's demos. The client appears in the demo's URL, so use a code name where the client should not be named.
 
@@ -99,7 +102,7 @@ One `KEY=VALUE` per line; `#` starts a comment; values may be quoted. The keys a
 
 - **Onboarding**: connect to the platform (skipped when the site provides the URL), email yourself a key, paste it.
 - **Demos**: cards with live status, build progress, expiry, estimated monthly cost (and the total for your live demos) and actions (open, app logs, build log, deploy, redeploy, extend, edit, destroy). Card or list view, sort by project name, client or status, grouped by client (on by default; demos with no client last), search, client filter, auto-refresh (5 minutes by default; 10s to 10m, or off).
-- **Demo panel**: overview with health, stage and total requests (a failed demo shows the failure cause; a deployment with no progress for 30 minutes is flagged as stuck, with Redeploy to free it), live-tail app logs, the latest build log (running or finished), metrics (requests per hour, day, week and in total, 2xx/4xx/5xx, response time, last request), settings, danger zone.
+- **Demo panel**: overview with health, stage and total requests (a failed demo shows the failure cause; a deployment with no progress for 30 minutes is flagged as stuck, with Redeploy to free it), live-tail app logs, the latest build log (running or finished), metrics (requests per hour, day, week and in total, 2xx/4xx/5xx, response time, last request), the repo's SHARED.md notes (Shared tab), settings, danger zone.
 - **Admins** see every demo and can deploy, redeploy, extend or destroy any of them (with a confirm naming the owner, who gets a note). Editing settings stays with the creator.
 - **New demo / Edit settings**: a five-step wizard (name, source, runtime, environment, review) that saves, waits for the repo check, then deploys. Env values are never returned by the platform, so re-enter them when editing. The Source step takes GitHub access the same three ways (type `public`, paste or load a deploy key file, or paste a PAT); it is sent once, never stored in the browser, and the review shows only its kind.
 - **Help** (guide, FAQ, raw JSON requests like `lilypad -`) and **Settings** (account, platform URL, theme, auto-refresh).

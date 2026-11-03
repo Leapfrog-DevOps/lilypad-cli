@@ -36,12 +36,26 @@ class H(BaseHTTPRequestHandler):
                                "requests": {"1h": 12, "24h": 340, "7d": 2104, "total": 5412},
                                "codes": {"2xx": 5180, "4xx": 201, "5xx": 31},
                                "latencyMs": {"p50": 42, "p95": 310}, "lastRequestAt": "2026-10-28T09:00:00Z"})
+        elif code == 200 and req.get("action") == "shared":
+            # busydemo has notes, with HTML and a javascript: link the web client must show as text; others have none.
+            md = ("# Busy demo\n\nLogin: `demo` / `demo`\n\n- Step **one**\n  - Sub step\n- Step *two*\n\n1. First\n2. Second\n\n"
+                  "| Page | Path |\n|---|---|\n| Home | `/` |\n\n```\ncurl -s /health\n```\n\n"
+                  "> Seeded data resets on redeploy.\n\n<img src=x onerror=\"alert(1)\"> "
+                  "[bad](javascript:alert(1)) [docs](https://example.com/docs)\n")
+            if req.get("name") == "busydemo":
+                reply.update(message=md, data={"name": "busydemo", "markdown": md, "sha": "4be0c2a91f3d",
+                                               "commit": "3f9c2ab", "capturedAt": "2026-10-28T09:00:00Z"})
+            else:
+                text = "No SHARED.md for %s. Add a SHARED.md at the root of the repo, then redeploy." % req.get("name")
+                reply.update(message=text, data={"name": req.get("name"), "markdown": "", "sha": "", "commit": "",
+                                                 "capturedAt": ""})
         elif code == 200 and req.get("action") == "list":
             # Demos across two clients and none, for the web dashboard's sort and grouping.
             row = lambda name, client, status, days: {
                 "name": name, "client": client, "status": status, "owner": "you@example.com",
                 "url": "https://" + name + ("-" + client if client else "") + ".demo.example.com",
-                "expiresAt": "2026-12-%02dT00:00:00Z" % days, "monthlyCost": 9.12 if status == "RUNNING" else None}
+                "expiresAt": "2026-12-%02dT00:00:00Z" % days, "monthlyCost": 9.12 if status == "RUNNING" else None,
+                "hasShared": name == "busydemo"}
             reply.update(data=[row("busydemo", "acme", "RUNNING", 20), row("shop", "globex", "RUNNING", 3),
                                row("alpha", "acme", "BUILDING", 25), row("faildemo", "", "FAILED", 10),
                                row("zeta", "", "RUNNING", 28)])

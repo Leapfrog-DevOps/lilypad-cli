@@ -5,11 +5,11 @@
 #   lilypad setup [<name>] [--conf FILE] [--repo <url>] [--client C] [--branch B] [--port N] [--health /p] [--size S] [--env-file F] [--notes T]
 #     GitHub access from $env:GITHUB_AUTH or a hidden prompt: a PAT, a deploy key file path, or "public"
 #   lilypad setup --sample > demoproject.conf   (a documented sample conf file)
-#   lilypad create|redeploy|status|metrics|extend|destroy|pin|unpin <name> | logs|build-logs <name> [lines]   (pin/unpin: admins; logs = app, build-logs = build; metrics = requests)
+#   lilypad create|redeploy|status|metrics|shared|extend|destroy|pin|unpin <name> | logs|build-logs <name> [lines]   (pin/unpin: admins; logs = app, build-logs = build; metrics = requests; shared = the repo's SHARED.md)
 #   lilypad config url <URL> | update | '<json>' | - | --how-to
 # Key: $env:LILYPAD_KEY, else %APPDATA%\lilypad\key. URL: $env:LILYPAD_URL, else %APPDATA%\lilypad\url.
 $ErrorActionPreference = 'Stop'
-$Version = '1.3.0'
+$Version = '1.4.0'
 
 function Die([string]$msg) { [Console]::Error.WriteLine("lilypad: $msg"); exit 1 }
 function Usage {
@@ -49,6 +49,10 @@ Demos are deleted after 30 days.
    - A health path returns 200-399 without a login (default /). If the app is behind a login,
      add an open /health route.
    - No real secrets in env vars: operators can see them. Auth is the app's own job.
+   - Optional: a SHARED.md at the root for notes (logins, a walkthrough, known issues). Only you
+     and admins see it: lilypad shared <name>, the web client's Shared tab, /lilypad shared in Slack.
+     Visitors of the demo never do. Picked up on each deploy (first 32 KB); edits show after a
+     redeploy; deleted with the demo. No file is fine.
 
 4. Give Lilypad read access to the repo (one of three)
    - Public repo: nothing to create. Use the word public.
@@ -96,6 +100,7 @@ Demos are deleted after 30 days.
 9. Lifecycle
       lilypad list                 # your demos, any status but destroyed
       lilypad metrics acme-poc     # is anyone using it? requests, errors, last visit
+      lilypad shared acme-poc      # the repo's SHARED.md: logins, walkthrough, known issues
       lilypad extend acme-poc      # expiry = now + 30 days (90 days total at most)
       lilypad destroy acme-poc     # permanent; the name is free for anyone afterwards
    A warning email arrives on day 27. At most 5 active demos per person (25 for sales, 50 for elite and admins).
@@ -259,7 +264,7 @@ switch -Regex ($action) {
     }
     $body = ToJson $o; break
   }
-  '^(create|redeploy|status|metrics|extend|destroy|pin|unpin)$' {
+  '^(create|redeploy|status|metrics|shared|extend|destroy|pin|unpin)$' {
     if ($rest.Count -ne 1) { Usage }
     $body = ToJson @{ action = $action; name = $rest[0] }; break
   }

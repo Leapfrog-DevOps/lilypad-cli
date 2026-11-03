@@ -6,7 +6,7 @@
   platform goes through textContent (never innerHTML). The platform URL and key are kept in
   localStorage; the GitHub access value (token, deploy key or "public") is sent once and never stored.
 
-  Views (hash routes): #/welcome (onboarding), #/demos, #/demo/<name>?tab=overview|logs|build|metrics|settings
+  Views (hash routes): #/welcome (onboarding), #/demos, #/demo/<name>?tab=overview|shared|logs|build|metrics|settings
   (detail drawer over the dashboard), #/new, #/edit/<name>, #/help (also public, no key needed), #/settings.
 */
 "use strict";
@@ -1046,6 +1046,7 @@
       { icon: "i-terminal", label: "App logs", run: () => go("demo/" + n + "?tab=logs") },
       { icon: "i-terminal", label: "Build log", run: () => go("demo/" + n + "?tab=build") },
       { icon: "i-chart", label: "Metrics", run: () => go("demo/" + n + "?tab=metrics") },
+      d.hasShared ? { icon: "i-file", label: "Shared notes", run: () => go("demo/" + n + "?tab=shared") } : null,
       (s === "CONFIGURED" || s === "FAILED") && canDeploy(d) ? { icon: "i-rocket", label: "Deploy", run: () => runAction("create", d.name) } : null,
       s === "RUNNING" && canDeploy(d) ? { icon: "i-redo", label: "Redeploy latest commit", run: () => runAction("redeploy", d.name) } : null,
       s === "RUNNING" && !d.permanent ? { icon: "i-calendar", label: "Extend 30 days", run: () => runAction("extend", d.name) } : null,
@@ -1156,12 +1157,13 @@
         await loadDrawer();
         if (S.drawer && isLogTab(S.drawer.tab)) loadLogs();
         if (S.drawer && S.drawer.tab === "metrics") loadMetrics();
+        if (S.drawer && S.drawer.tab === "shared") loadShared();
       });
       acts.append(rb);
     }
     head.append(acts);
     if (!missing) {
-      head.append(h("div", { class: "tabs", role: "tablist" }, [["overview", "Overview"], ["logs", "App logs"], ["build", "Build log"], ["metrics", "Metrics"], ["settings", "Settings"]].map(([id, label]) =>
+      head.append(h("div", { class: "tabs", role: "tablist" }, [["overview", "Overview"], ["shared", "Shared"], ["logs", "App logs"], ["build", "Build log"], ["metrics", "Metrics"], ["settings", "Settings"]].map(([id, label]) =>
         h("button", { type: "button", role: "tab", "aria-selected": D.tab === id ? "true" : "false", text: label, onclick: () => setTab(id) }))));
     }
   }
@@ -1184,6 +1186,7 @@
     if (!D.r.ok) { body.append(h("div", { class: "alert alert-err" }, icon("i-alert"), h("div", { class: "alert-body", text: errText(D.r) }))); return; }
     if (isLogTab(D.tab)) renderLogsTab(body);
     else if (D.tab === "metrics") renderMetricsTab(body);
+    else if (D.tab === "shared") renderSharedTab(body);
     else if (D.tab === "settings") renderSettingsTab(body);
     else renderOverviewTab(body);
   }
@@ -1239,6 +1242,7 @@
         ? "About " + money(d.cost.monthly) + "/month (" + money(d.cost.daily) + "/day) · " + money(d.cost.soFar) + " so far"
         : "Nothing yet · about " + money(d.cost.monthly) + "/month once live"],
       ["Requests", d.requests ? count(d.requests.total) + " total" : ""],
+      ["SHARED.md", d.hasShared ? h("a", { href: "#/demo/" + encodeURIComponent(D.name) + "?tab=shared", text: "Notes from the repo · open the Shared tab" }) : ""],
       ["Commit", d.commitSha ? h("code", { text: d.commitSha.slice(0, 12) }) : ""],
       ["Created", d.createdAt ? fmtDateTime(d.createdAt) : ""],
       ["First live", d.firstLiveAt ? fmtDateTime(d.firstLiveAt) : ""],
@@ -1319,6 +1323,156 @@
       ["Last request", m.lastRequestAt ? fmtDateTime(m.lastRequestAt) + " (" + fmtRel(m.lastRequestAt) + ")" : "None yet"],
       ["As of", m.asOf ? fmtDateTime(m.asOf) : ""],
     ]), h("p", { class: "hint mt-16", text: "Counted by the load balancer, about 2 minutes behind. These are requests, not unique visitors. App 5xx are your app's own errors; the load balancer's 502/503/504 when no container answers are not included." }));
+  }
+
+  // SHARED.md from the repo (ADR 029), as the last deploy captured it. Fetched when the tab first opens and on Refresh.
+  // It is text from a repo, so it is drawn by renderMarkdown, which builds elements with textContent only.
+  async function loadShared() {
+    const D = S.drawer;
+    if (!D || D.sharedLoading) return;
+    D.sharedLoading = true;
+    const r = await api({ action: "shared", name: D.name });
+    if (S.drawer !== D) return;
+    D.shared = r;
+    D.sharedLoading = false;
+    if (D.tab === "shared") renderDrawerBody();
+  }
+
+  function renderSharedTab(body) {
+    const D = S.drawer;
+    if (!D.shared) {
+      loadShared();
+      body.append(h("div", { class: "bone l3" }), h("div", { class: "bone l3" }), h("div", { class: "bone l3" }));
+      return;
+    }
+    const r = D.shared, m = r.data || {};
+    if (!r.ok) { body.append(h("div", { class: "alert alert-err" }, icon("i-alert"), h("div", { class: "alert-body", text: errText(r) }))); return; }
+    if (!m.markdown) {
+      body.append(h("div", { class: "empty" }, h("div", { class: "empty-art" }, logoMark()),
+        h("h2", { text: "No SHARED.md yet" }),
+        h("p", { text: "Add a file named SHARED.md at the root of the repo, on the branch this demo deploys, then redeploy. Use it for logins, a walkthrough or known issues." }),
+        h("p", { class: "hint", text: "Markdown works; HTML shows as plain text. Up to 32 KB." })));
+      return;
+    }
+    const from = [m.commit ? "From commit " + m.commit : "From the last deploy", m.capturedAt ? "captured " + fmtDateTime(m.capturedAt) : ""].filter(Boolean).join(", ");
+    body.append(h("p", { class: "hint", text: from + ". Edits show after a redeploy." }),
+      h("article", { class: "md mt-16" }, renderMarkdown(m.markdown)));
+  }
+
+  // A small markdown subset, built from DOM nodes and textContent only (never innerHTML): headings, paragraphs,
+  // lists (one level of nesting), fenced code, quotes, rules and pipe tables; inline code, bold, italic, links.
+  // HTML in the source stays literal text. Links are kept only for http(s); an image becomes a link to it.
+  const MD_FENCE = /^\s*(```|~~~)/;
+  const MD_HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
+  const MD_RULE = /^\s*([-*_])(\s*\1){2,}\s*$/;
+  const MD_QUOTE = /^\s*>\s?/;
+  const MD_ITEM = /^(\s*)([-*+]|\d{1,9}[.)])\s+(.*)$/;
+  const MD_TABLE_SEP = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/;
+  function mdStartsBlock(line, next) {
+    return MD_FENCE.test(line) || MD_HEADING.test(line) || MD_RULE.test(line) || MD_QUOTE.test(line) || MD_ITEM.test(line) ||
+      (line.indexOf("|") >= 0 && next !== undefined && MD_TABLE_SEP.test(next));
+  }
+  function mdCells(line) {
+    return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
+  }
+  function renderMarkdown(src) {
+    const lines = String(src).replace(/\r\n?/g, "\n").split("\n");
+    const out = document.createDocumentFragment();
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      if (!line.trim()) { i++; continue; }
+      const fence = line.match(MD_FENCE);
+      if (fence) {
+        const code = [];
+        for (i++; i < lines.length && !lines[i].trim().startsWith(fence[1]); i++) code.push(lines[i]);
+        i++;
+        out.append(h("pre", null, h("code", { text: code.join("\n") })));
+        continue;
+      }
+      const head = line.match(MD_HEADING);
+      if (head) {
+        const level = head[1].length;
+        out.append(h("h" + Math.min(level + 2, 6), { class: "md-h" + level }, mdInline(head[2])));
+        i++;
+        continue;
+      }
+      if (MD_RULE.test(line)) { out.append(h("hr")); i++; continue; }
+      if (MD_QUOTE.test(line)) {
+        const quoted = [];
+        for (; i < lines.length && MD_QUOTE.test(lines[i]); i++) quoted.push(lines[i].replace(MD_QUOTE, ""));
+        out.append(h("blockquote", null, renderMarkdown(quoted.join("\n"))));
+        continue;
+      }
+      if (line.indexOf("|") >= 0 && i + 1 < lines.length && MD_TABLE_SEP.test(lines[i + 1])) {
+        const head = mdCells(line);
+        const rows = [];
+        for (i += 2; i < lines.length && lines[i].indexOf("|") >= 0 && lines[i].trim(); i++) rows.push(mdCells(lines[i]));
+        out.append(h("div", { class: "md-table" }, h("table", null,
+          h("thead", null, h("tr", null, head.map((c) => h("th", null, mdInline(c))))),
+          h("tbody", null, rows.map((r) => h("tr", null, head.map((_, k) => h("td", null, mdInline(r[k] || "")))))))));
+        continue;
+      }
+      if (MD_ITEM.test(line)) {
+        const list = mdList(lines, i);
+        out.append(list.el);
+        i = list.next;
+        continue;
+      }
+      const para = [];
+      for (; i < lines.length && lines[i].trim() && !(para.length && mdStartsBlock(lines[i], lines[i + 1])); i++) para.push(lines[i].trim());
+      out.append(h("p", null, mdInline(para.join(" "))));
+    }
+    return out;
+  }
+  // A list from lines[start]: items at its indent, deeper items as one nested list, indented text joins its item.
+  function mdList(lines, start) {
+    const first = lines[start].match(MD_ITEM);
+    const indent = first[1].length, ordered = /\d/.test(first[2]);
+    const el = h(ordered ? "ol" : "ul");
+    let i = start, li = null;
+    while (i < lines.length) {
+      const line = lines[i];
+      if (!line.trim()) { if (i + 1 < lines.length && MD_ITEM.test(lines[i + 1])) { i++; continue; } break; }
+      const m = line.match(MD_ITEM);
+      if (m && m[1].length < indent) break;
+      if (m && m[1].length <= indent + 1) {
+        if (/\d/.test(m[2]) !== ordered) break;
+        li = h("li", null, mdInline(m[3]));
+        el.append(li);
+        i++;
+      } else if (m && li) {
+        const sub = mdList(lines, i);
+        li.append(sub.el);
+        i = sub.next;
+      } else if (li && /^\s+\S/.test(line) && !mdStartsBlock(line.trim(), lines[i + 1])) {
+        li.append(" ", ...mdInline(line.trim()));
+        i++;
+      } else break;
+    }
+    return { el, next: i };
+  }
+  const MD_INLINE = /(`+)([\s\S]*?[^`])\1(?!`)|(!?)\[([^\]]*)\]\(\s*((?:[^\s()]|\([^\s()]*\))+)(?:\s+"[^"]*")?\s*\)|\*\*([\s\S]+?)\*\*|\*([^*\s](?:[^*]*[^*\s])?)\*|(https?:\/\/[^\s<>()]*[^\s<>().,;:!?'"])/;
+  function mdLink(url, kids) {
+    return /^https?:\/\//i.test(url) ? h("a", { href: url, target: "_blank", rel: "noopener noreferrer" }, kids) : kids;
+  }
+  function mdInline(text) {
+    const nodes = [];
+    let rest = String(text);
+    while (rest) {
+      const m = rest.match(MD_INLINE);
+      if (!m) { nodes.push(rest); break; }
+      if (m.index) nodes.push(rest.slice(0, m.index));
+      if (m[1]) nodes.push(h("code", { text: m[2] }));
+      else if (m[5] !== undefined) {
+        const label = m[3] ? "Image: " + (m[4] || m[5]) : m[4] || m[5];
+        nodes.push(mdLink(m[5], m[3] ? [label] : mdInline(label)));
+      } else if (m[6] !== undefined) nodes.push(h("strong", null, mdInline(m[6])));
+      else if (m[7] !== undefined) nodes.push(h("em", null, mdInline(m[7])));
+      else nodes.push(mdLink(m[8], [m[8]]));
+      rest = rest.slice(m.index + m[0].length);
+    }
+    return nodes.flat(Infinity);
   }
 
   // Two log views share the terminal: the running app's logs and the latest build's log (ADR 022).
@@ -1688,7 +1842,7 @@
       h("h2", { text: "Where's the code?" }),
       h("p", { class: "lead", text: "Lilypad builds the Dockerfile at the root of this repo and branch." }),
       h("div", { class: "form-grid" },
-        field("repo", "GitHub repository", repo, { span: true, hint: "The repo needs a Dockerfile at its root." }),
+        field("repo", "GitHub repository", repo, { span: true, hint: "The repo needs a Dockerfile at its root. Optional: a SHARED.md there too, for notes only you and admins see (the Shared tab)." }),
         field("branch", "Branch", branch, { hint: "Default: main" }),
         h("div"),
         field("pat", "GitHub access", pat, {
@@ -1930,7 +2084,7 @@
     ["Paste the key", "Copy the key (it starts with lpk_) from the email “Your Lilypad access key” and paste it in. It works for 30 days in this browser."],
   ];
   const DEPLOY_STEPS = [
-    ["Prepare the repo", "A Dockerfile at the repo root. The app listens on one port (8080 by default) and has a path that answers 200 without a login."],
+    ["Prepare the repo", "A Dockerfile at the repo root. The app listens on one port (8080 by default) and has a path that answers 200 without a login. Optional: a SHARED.md at the root for notes (logins, a walkthrough), shown in the demo's Shared tab."],
     ["Give Lilypad read access", "One of three. Public repo: nothing to create, type public. Deploy key: run ssh-keygen -t ed25519 -N \"\" -f ~/.ssh/lilypad_<name>, add the .pub under the repo's Settings › Deploy keys (read-only, leave \"Allow write access\" off), and load the private key file. Or a fine-grained token with read-only Contents on that one repo."],
     ["Set up the demo", "New demo: pick a name, paste the repo and its GitHub access, choose port, health path and size."],
     ["Deploy", "Save & deploy. It takes 5–10 minutes. You get an email when it's live, or if it fails."],
@@ -1938,6 +2092,7 @@
     ["Clean up", "Demos expire after 30 days, with a warning on day 27. Extend adds 30 days, up to 90 in total. Destroy when you're done."],
   ];
   const FAQ = [
+    ["What is SHARED.md and who sees it?", "An optional file named SHARED.md at the root of the repo, on the branch you deploy: logins, a walkthrough, known issues. Lilypad reads it on every successful deploy or redeploy (up to 32 KB) and shows it in the demo's Shared tab, with lilypad shared <name> in the CLI and /lilypad shared <name> in Slack. Only the demo's creator and Lilypad admins see it; people who open the demo's URL never do. Markdown works; HTML shows as plain text and images show as links. No file means no notes, never an error. Edits show after the next redeploy, and the notes are deleted when the demo is destroyed. Don't put anything in it you wouldn't post in a team Slack channel."],
     ["The key email didn't arrive.", "It usually takes under a minute. Check spam or junk, and that you used your plain @" + EMAIL_DOMAIN + " address (no + aliases). You can ask for your key again once a minute."],
     ["Can I use the same key on several machines?", "Yes. Asking for your key again (here, or lilypad auth in the CLI) emails the same key while it is valid, so every copy keeps working. Turn on \u201cSend a new key instead\u201d (lilypad auth --new) only if the key leaked or is about to expire: the old key then stops working everywhere."],
     ["Why isn't my demo on the dashboard?", "The dashboard lists your demos that aren't destroyed (admins see everyone's). If one is missing, refresh, or open it by name at the bottom of the Demos page."],

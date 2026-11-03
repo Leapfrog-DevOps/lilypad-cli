@@ -58,7 +58,7 @@ export LILYPAD_URL="$url"
 [ "$(last | jq -r '.body.args // "none"')" = none ] || bad "list sent args without --client"
 "$cli" list --client acme >/dev/null; [ "$(last | jq -r .body.args.client)" = acme ] || bad list-client
 "$cli" list --bogus >/dev/null 2>&1 && bad "list accepted an unknown option" || true
-for c in create redeploy status metrics extend destroy; do
+for c in create redeploy status metrics shared extend destroy; do
   "$cli" "$c" demo1 >/dev/null
   [ "$(last | jq -r .body.action)/$(last | jq -r .body.name)" = "$c/demo1" ] || bad "$c"
 done
@@ -74,6 +74,16 @@ out="$("$cli" metrics busydemo)" || bad "metrics exited non-zero"
 [ "$(jq -r '.data.requests.total' <<<"$out")/$(jq -r '.data.codes["5xx"]' <<<"$out")" = 5412/31 ] || bad "metrics data lost: $out"
 grep -q "Total: 5,412" <<<"$(jq -r .message <<<"$out")" || bad "metrics message lost: $out"
 ok "metrics passes requests, codes and message through"
+"$cli" shared >/dev/null 2>&1 && bad "shared accepted no name" || true
+"$cli" shared demo1 extra >/dev/null 2>&1 && bad "shared accepted two names" || true
+out="$("$cli" shared busydemo)" || bad "shared exited non-zero"
+[ "$(jq -r .message <<<"$out")" = "$(jq -r .data.markdown <<<"$out")" ] || bad "shared message is not the markdown: $out"
+grep -q "^# Busy demo" <<<"$(jq -r .message <<<"$out")" || bad "shared markdown lost: $out"
+[ "$(jq -r .data.commit <<<"$out")" = 3f9c2ab ] || bad "shared data lost: $out"
+out="$("$cli" shared demo1)" || bad "shared without notes exited non-zero"
+[ "$(jq -r .ok <<<"$out")" = true ] && grep -q "No SHARED.md" <<<"$out" || bad "shared without notes is an error: $out"
+"$cli" help shared | grep -q "root of the repo" || bad "help shared does not say where SHARED.md goes"
+ok "shared passes the markdown through; no SHARED.md is not an error"
 out="$("$cli" status faildemo)" || bad "status on a FAILED demo exited non-zero"
 grep -q "Last failure: .*ELB health checks" <<<"$(jq -r .message <<<"$out")" || bad "status message lost Last failure: $out"
 [ "$(jq -r .data.lastFailure <<<"$out")" != null ] || bad "status data lost lastFailure: $out"
@@ -81,7 +91,7 @@ ok "status passes Last failure through (message and data.lastFailure)"
 out="$("$cli" redeploy faildemo)" || bad "redeploy on a FAILED demo exited non-zero"
 [ "$(last | jq -r .body.action)" = redeploy ] && [ "$(jq -r .ok <<<"$out")" = true ] || bad "redeploy on FAILED not accepted: $out"
 ok "redeploy on a FAILED demo is accepted"
-[ "$("$cli" --version)" = "lilypad 1.3.0" ] || bad version
+[ "$("$cli" --version)" = "lilypad 1.4.0" ] || bad version
 ok "--version"
 
 printf 'FOO=bar\n' >"$work/app.env"
@@ -135,6 +145,7 @@ ok "installer (env URL, skill)"
 LILYPAD_URL="http://x" bash "$here/install.sh" >/dev/null 2>&1 && bad "installer accepted http" || true
 ok "installer rejects non-https URL"
 out="$(env -u LILYPAD_URL HOME="$work/empty" "$cli" --how-to)"; grep -q "Lilypad: how to deploy a demo" <<<"$out" || bad "how-to"
+grep -q "SHARED.md at the root" <<<"$out" || bad "how-to does not mention SHARED.md"
 ok "--how-to prints the guide without a URL or network"
 
 # --- setup --conf -------------------------------------------------------------------

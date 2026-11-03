@@ -18,6 +18,7 @@
 #   lilypad logs <name> [lines]               app (container) logs; default 50, max 500
 #   lilypad build-logs <name> [lines]         latest build log, running or finished; default 50, max 500
 #   lilypad metrics <name>                    requests (1h, 24h, 7d, total), 2xx/4xx/5xx, response time
+#   lilypad shared <name>                     the repo's SHARED.md notes (creator and admins only)
 #   lilypad pin|unpin <name>                  admins: make permanent (no expiry, not destroyable), or undo
 #   lilypad '<json>' | lilypad -            raw JSON body (JSON as an argument, or on stdin)
 #   lilypad <command> --help                  what a command does and the options it takes
@@ -25,10 +26,10 @@
 # Key: $LILYPAD_KEY, else ~/.config/lilypad/key. URL: $LILYPAD_URL, else ~/.config/lilypad/url.
 set -euo pipefail
 
-VERSION="1.3.0"
+VERSION="1.4.0"
 
 usage() {
-  sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//' >&2
+  sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//' >&2
   exit 2
 }
 
@@ -57,6 +58,9 @@ Demos are deleted after 30 days.
    - A health path returns 200-399 without a login (default /). If the app is behind a login,
      add an open /health route.
    - No real secrets in env vars: operators can see them. Auth is the app's own job.
+   - Optional: a SHARED.md at the root for notes (logins, a walkthrough, known issues). Only you
+     and admins see it: lilypad shared <name>, the web client's Shared tab, /lilypad shared in Slack.
+     Visitors of the demo never do. It is picked up on each deploy; see: lilypad help shared
 
 4. Give Lilypad read access to the repo (one of three)
    - Public repo: nothing to create. Use the word public.
@@ -103,6 +107,7 @@ Demos are deleted after 30 days.
 9. Lifecycle
       lilypad list                 # your demos, any status but destroyed
       lilypad metrics acme-poc     # is anyone using it? requests, errors, last visit
+      lilypad shared acme-poc      # the repo's SHARED.md: logins, walkthrough, known issues
       lilypad extend acme-poc      # expiry = now + 30 days (90 days total at most)
       lilypad destroy acme-poc     # permanent; the name is free for anyone afterwards
    A warning email arrives on day 27. At most 5 active demos per person (25 for sales, 50 for elite and admins).
@@ -281,6 +286,7 @@ Save a demo's configuration. Nothing is deployed: run `lilypad create <name>` af
 The repo and Dockerfile are checked in the background; poll `lilypad status <name>` for the result.
 Rerunning setup REPLACES the whole config: repeat every option you want to keep. Only the
 GitHub access is carried over when left blank, except on a destroyed name (fresh start).
+Optional SHARED.md at the repo root: notes only you and admins see (lilypad help shared).
 
   <name>              project name, 3 to 24 chars: lowercase letters, digits, hyphens; starts
                       with a letter. Served at https://<name>.<the platform's demo domain>
@@ -379,6 +385,22 @@ Logs are kept 7 days.
 
   <name>    the demo name
   [lines]   how many lines. Default: 50, max: 500
+EOT
+      ;;
+    shared) cat <<'EOT'
+lilypad shared <name>
+
+Print the demo's SHARED.md as the last successful deploy or redeploy captured it.
+SHARED.md is optional: put it at the root of the repo, on the branch you deploy (logins, a
+walkthrough, known issues). Lilypad keeps the first 32 KB. Only the creator and Lilypad admins
+see it, here, in the web client's Shared tab and with /lilypad shared in Slack; people who open
+the demo's URL never do. Markdown works; in the web client HTML shows as plain text. No file is
+not an error. Edits show after the next redeploy; extend and pin keep the notes; destroy
+deletes them. Nothing you would not post in a team Slack channel.
+Print the file alone with:  lilypad shared <name> | jq -r .message
+Creator or admin.
+
+  <name>    the demo name
 EOT
       ;;
     metrics) cat <<'EOT'
@@ -543,7 +565,7 @@ case "$action" in
     need_jq
     body="$(jq -nc --arg c "$client" '{action: "list"} + (if $c == "" then {} else {args: {client: $c}} end)')"
     ;;
-  create | redeploy | status | metrics | extend | destroy | pin | unpin)
+  create | redeploy | status | metrics | shared | extend | destroy | pin | unpin)
     [ $# -eq 1 ] || usage
     need_jq
     body="$(jq -nc --arg a "$action" --arg n "$1" '{action: $a, name: $n}')"

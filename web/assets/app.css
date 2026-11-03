@@ -683,3 +683,25 @@ div.notes-full { margin: 0; padding: 12px 14px; background: var(--surface-2); bo
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
 }
+
+/* SHARED.md (ADR 029): markdown drawn by renderMarkdown in app.js */
+.md { font-size: 14px; line-height: 1.6; color: var(--ink); max-width: 72ch; overflow-wrap: anywhere; }
+.md > :first-child { margin-top: 0; }
+.md h3, .md h4, .md h5, .md h6 { margin: 22px 0 8px; line-height: 1.3; color: var(--ink); text-wrap: balance; }
+.md .md-h1 { font-size: 20px; } .md .md-h2 { font-size: 17px; } .md .md-h3 { font-size: 15px; }
+.md .md-h4, .md .md-h5, .md .md-h6 { font-size: 14px; color: var(--ink-2); }
+.md p, .md ul, .md ol, .md blockquote, .md pre, .md .md-table { margin: 0 0 12px; }
+.md ul, .md ol { padding-left: 22px; }
+.md li { margin: 3px 0; }
+.md li > ul, .md li > ol { margin: 4px 0 0; }
+.md code { font: 12.5px/1.5 var(--mono); background: var(--surface-2); border: 1px solid var(--line); border-radius: 5px; padding: 0 4px; }
+.md pre { background: var(--term-bg); color: var(--term-ink); border-radius: var(--radius); padding: 12px 14px; overflow-x: auto; }
+.md pre code { background: none; border: 0; padding: 0; color: inherit; white-space: pre; }
+.md blockquote { border-left: 3px solid var(--line); padding: 2px 0 2px 14px; color: var(--ink-3); }
+.md hr { border: 0; border-top: 1px solid var(--line); margin: 18px 0; }
+.md a { font-weight: 600; }
+.md .md-table { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+.md table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+.md th, .md td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.md th { background: var(--surface-2); color: var(--ink-3); font-weight: 600; }
+.md tr:last-child td { border-bottom: 0; }
