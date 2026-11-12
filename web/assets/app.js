@@ -15,7 +15,7 @@
   // Constants
   // ---------------------------------------------------------------------------------------------
   const K = { url: "lilypad.url", key: "lilypad.key", refresh: "lilypad.refresh", tracked: "lilypad.tracked", theme: "lilypad.theme",
-    sort: "lilypad.sort", group: "lilypad.group", view: "lilypad.view" };
+    sort: "lilypad.sort", group: "lilypad.group", view: "lilypad.view", tsort: "lilypad.tsort" };
   const EMAIL_DOMAIN = "lftechnology.com";
   const NAME_RE = /^[a-z][a-z0-9-]{1,22}[a-z0-9]$/;
   const CLIENT_RE = /^[a-z0-9]([a-z0-9-]{0,18}[a-z0-9])?$/;
@@ -271,7 +271,7 @@
     anchor.parentElement.append(m);
     const rect = anchor.getBoundingClientRect();
     if (window.innerHeight - rect.bottom < 300 && rect.top > 320) m.classList.add("up");
-    const host = anchor.closest(".demo, .demo-row");
+    const host = anchor.closest(".demo, .demo-row, .trow");
     if (host) host.classList.add("menu-open");
     anchor.setAttribute("aria-expanded", "true");
     S.menu = { el: m, anchor, host };
@@ -434,7 +434,16 @@
   const SORT_OPTS = [["name", "Project name"], ["client", "Client"], ["status", "Status"]];
   const sortBy = () => { const v = store.get(K.sort); return SORT_OPTS.some((o) => o[0] === v) ? v : "name"; };
   const grouped = () => store.get(K.group) !== "0";
-  const viewMode = () => (store.get(K.view) === "list" ? "list" : "cards");
+  const viewMode = () => { const v = store.get(K.view); return v === "list" || v === "table" ? v : "cards"; };
+  // Table view sorts by its column headers instead of the toolbar's sort menu: "key:asc" or "key:desc".
+  const TABLE_COLS = [
+    ["client", "Client"], ["name", "Demo"], ["notes", "Description"], ["access", "Access", true], ["status", "Status"],
+    ["owner", "Owner"], ["expires", "Expires"], ["days", "Days left"], ["cost", "$/mo"], ["actions", "Actions", true],
+  ];
+  function tableSort() {
+    const [k, dir] = (store.get(K.tsort) || "").split(":");
+    return TABLE_COLS.some((c) => c[0] === k && !c[2]) ? { key: k, dir: dir === "desc" ? "desc" : "asc" } : { key: "name", dir: "asc" };
+  }
   function schedule() {
     clearInterval(S.timer);
     S.timer = null;
@@ -815,7 +824,7 @@
       b.addEventListener("click", () => { store.set(K.view, v); updateDemos(); });
       return b;
     };
-    const views = h("div", { class: "seg", role: "group", "aria-label": "View" }, viewBtn("cards", "i-grid", "Card view"), viewBtn("list", "i-list", "List view"));
+    const views = h("div", { class: "seg", role: "group", "aria-label": "View" }, viewBtn("cards", "i-grid", "Card view"), viewBtn("list", "i-list", "List view"), viewBtn("table", "i-table", "Table view"));
 
     const openInput = h("input", { class: "input", placeholder: "demo-name", "aria-label": "Demo name", autocomplete: "off", spellcheck: "false" });
     const openGo = () => {
@@ -899,8 +908,10 @@
     const gb = $("#group-btn");
     if (gb) gb.setAttribute("aria-pressed", String(grouped()));
     document.querySelectorAll(".seg [data-view]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.view === view)));
+    const ss = $("#sort-sel");
+    if (ss) ss.hidden = view === "table";
     clear(grid);
-    grid.className = view === "list" && S.loaded ? "list" : "grid";
+    grid.className = view !== "cards" && S.loaded ? "list" : "grid";
     if (!S.loaded) {
       for (let i = 0; i < 3; i++) {
         grid.append(h("div", { class: "card demo", "aria-hidden": "true" },
@@ -922,6 +933,7 @@
           btn("Create a demo", { cls: "btn-primary btn-lg", icon: "i-rocket", href: "#/new" })));
       return;
     }
+    if (view === "table") { grid.append(demoTable(items)); return; }
     const one = view === "list" ? demoRow : demoCard;
     if (!grouped()) { for (const d of items) grid.append(one(d)); return; }
     const groups = new Map();
@@ -970,7 +982,7 @@
     const me = myEmail();
     const sub = [];
     if (d.permanent) sub.push(h("span", { class: "tag permanent", title: "Pinned by an admin: never expires, can't be destroyed", text: "Permanent" }));
-    if (d.owner) sub.push(h("span", { class: "demo-owner", title: d.owner, text: d.owner.toLowerCase() === me ? "You" : d.owner }));
+    if (d.owner) sub.push(h("span", { class: "demo-owner", title: d.owner, text: d.owner.toLowerCase() === me ? "You" : d.owner.split("@")[0] }));
 
     const kebab = h("button", { class: "iconbtn", type: "button", "aria-label": "More actions for " + d.name, "aria-haspopup": "menu", "aria-expanded": "false" }, icon("i-more"));
     kebab.addEventListener("click", (e) => { e.stopPropagation(); openMenu(kebab, demoMenu(d)); });
@@ -1036,6 +1048,91 @@
       h("span", { class: "row-left" + (!d.permanent && n !== null && n <= 7 ? " warn" : ""), text: left }),
       p.cost || h("span", { class: "demo-cost" }),
       h("div", { class: "row-actions" }, p.primary, h("div", { class: "demo-kebab" }, p.kebab)));
+    return openable(row, d);
+  }
+
+  // Table view: one <tr> per demo, columns sortable from the header. Group-by-client adds a header row per client.
+  function tableCmp(key) {
+    const rank = (d) => ({ busy: 0, fail: 1, idle: 2, live: 3, unknown: 4 })[category(d)];
+    // Permanent demos and demos with no expiry sort after every dated one.
+    const exp = (d) => (d.permanent ? Infinity : ts(d.expiresAt) === null ? Number.MAX_VALUE : ts(d.expiresAt));
+    const num = (a, b) => (a === b ? 0 : a < b ? -1 : 1);
+    const str = (f) => (a, b) => byClient(f(a), f(b));
+    return ({
+      client: str((d) => d.client), name: (a, b) => a.name.localeCompare(b.name), notes: str((d) => d.notes),
+      status: (a, b) => rank(a) - rank(b), owner: str((d) => d.owner),
+      expires: (a, b) => num(exp(a), exp(b)), days: (a, b) => num(exp(a), exp(b)),
+      cost: (a, b) => num(typeof a.monthlyCost === "number" ? a.monthlyCost : Infinity, typeof b.monthlyCost === "number" ? b.monthlyCost : Infinity),
+    })[key];
+  }
+  function demoTable(items) {
+    const ts0 = tableSort();
+    const cmp = tableCmp(ts0.key);
+    const sign = ts0.dir === "desc" ? -1 : 1;
+    const sorted = items.slice().sort((a, b) => sign * cmp(a, b) || a.name.localeCompare(b.name));
+    const head = h("tr", null, TABLE_COLS.map(([k, label, fixed]) => {
+      if (fixed) return h("th", { scope: "col", class: "c-" + k, text: label });
+      const on = ts0.key === k;
+      const b = h("button", { type: "button", class: "th-sort" + (on ? " on" : ""), title: "Sort by " + label.toLowerCase() },
+        h("span", { text: label }), icon(on ? (ts0.dir === "asc" ? "i-arrow-up" : "i-arrow-down") : "i-sort", "icon-s"));
+      b.addEventListener("click", () => { store.set(K.tsort, k + ":" + (on && ts0.dir === "asc" ? "desc" : "asc")); updateDemos(); });
+      return h("th", { scope: "col", class: "c-" + k, "aria-sort": on ? (ts0.dir === "asc" ? "ascending" : "descending") : null }, b);
+    }));
+    const table = h("table", { class: "dtable" }, h("thead", null, head));
+    if (!grouped()) { table.append(h("tbody", null, sorted.map(demoTr))); }
+    else {
+      const groups = new Map();
+      for (const d of sorted) { const k = d.client || ""; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(d); }
+      for (const k of Array.from(groups.keys()).sort(byClient)) {
+        const ds = groups.get(k);
+        table.append(h("tbody", null,
+          h("tr", { class: "tgroup" }, h("th", { scope: "rowgroup", colspan: String(TABLE_COLS.length) },
+            h("span", { class: "group-head" + (k ? "" : " none") }, h("span", { text: k || "No client" }), h("span", { class: "group-count", text: String(ds.length) })))),
+          ds.map(demoTr)));
+      }
+    }
+    return h("div", { class: "card table-wrap" }, table);
+  }
+  function demoTr(d) {
+    const p = demoParts(d);
+    const url = safeHttps(d.url);
+    const me = myEmail();
+    const n = daysLeft(d.expiresAt);
+    const running = d.status === "RUNNING";
+    const level = n === null ? "" : n <= 3 ? " crit" : n <= 7 ? " warn" : "";
+    let days = h("span", { class: "none", text: "—" });
+    if (d.permanent) days = h("span", { class: "tag permanent", text: "Permanent" });
+    else if (running && n !== null) {
+      const pct = Math.max(2, Math.min(100, (n / TTL_DAYS) * 100));
+      days = h("div", { class: "tdays", title: (n > 1 ? n + " days left" : n === 1 ? "1 day left" : "Expires today") + " · " + fmtDate(d.expiresAt) },
+        h("span", { class: "tdays-n" + level, text: Math.max(0, n) + "d" }),
+        h("div", { class: "meter" + level, "aria-hidden": "true" }, h("i", { style: { width: pct + "%" } })));
+    }
+    // Expiring soon: extend right from the row, like the card's kebab menu does.
+    let act = null;
+    if ((d.status === "CONFIGURED" || d.status === "FAILED") && canDeploy(d)) {
+      act = btn(d.status === "FAILED" ? "Retry" : "Deploy", { cls: "btn-sm btn-primary", icon: "i-rocket", title: d.status === "FAILED" ? "Retry deploy" : "Deploy", aria: (d.status === "FAILED" ? "Retry deploy " : "Deploy ") + d.name });
+      act.addEventListener("click", (e) => { e.stopPropagation(); runAction("create", d.name, act); });
+    }
+    if (!act && running && !d.permanent && n !== null && n <= 7) {
+      act = btn("Extend", { cls: "btn-sm", icon: "i-calendar", iconCls: "tonly", title: "Extend 30 days", aria: "Extend " + d.name + " 30 days" });
+      act.addEventListener("click", (e) => { e.stopPropagation(); runAction("extend", d.name, act); });
+    }
+    const td = (k, ...kids) => h("td", { class: "c-" + k }, kids);
+    const row = h("tr", { class: "trow", tabindex: "0", "aria-label": d.name + ", " + statusLabel(d) },
+      td("client", d.client ? h("span", { class: "tag tclient", text: d.client }) : h("span", { class: "none", text: "—" })),
+      td("name", h("div", { class: "tname", title: d.name, text: d.name }), p.stage),
+      td("notes", d.notes ? h("div", { class: "tnotes", title: d.notes, text: d.notes }) : h("span", { class: "none", text: "—" })),
+      td("access", url
+        ? h("div", { class: "taccess" }, h("a", { href: url, target: "_blank", rel: "noopener noreferrer", title: url, text: url.replace(/^https:\/\//, "").replace(/\/$/, "") }),
+          h("button", { class: "iconbtn", type: "button", "aria-label": "Copy link", title: "Copy link", onclick: (e) => { e.stopPropagation(); copy(url, "Link copied"); } }, icon("i-copy", "icon-s")))
+        : h("span", { class: "none", text: "No address yet" })),
+      td("status", h("span", { class: "tstatus " + p.cat, text: statusLabel(d) })),
+      td("owner", d.owner ? h("span", { class: "towner", title: d.owner, text: d.owner.toLowerCase() === me ? "You" : d.owner.split("@")[0] }) : h("span", { class: "none", text: "—" })),
+      td("expires", d.permanent ? h("span", { class: "none", text: "Never" }) : running && d.expiresAt ? fmtDate(d.expiresAt) : h("span", { class: "none", text: "—" })),
+      td("days", days),
+      td("cost", typeof d.monthlyCost === "number" ? h("span", { title: "Estimated cost at list prices", text: money(d.monthlyCost) }) : h("span", { class: "none", text: "—" })),
+      td("actions", h("div", { class: "row-actions" }, act, h("div", { class: "demo-kebab" }, p.kebab))));
     return openable(row, d);
   }
 
