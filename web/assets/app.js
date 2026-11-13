@@ -651,12 +651,14 @@
   }
 
   function onbSteps() { return (S.cfg.apiUrl ? [] : ["connect"]).concat(["email", "key"]); }
+  // Pasting a key you already have is the email step's other tab, not a step after it.
+  function onbStepAt() { return S.onb.step === "key" && !S.onb.sent ? "email" : S.onb.step; }
 
   function renderOnbStep() {
     const card = clear($("#onb-card"));
     const steps = onbSteps();
     const done = S.onb.step === "done";
-    const idx = done ? steps.length : Math.max(0, steps.indexOf(S.onb.step));
+    const idx = done ? steps.length : Math.max(0, steps.indexOf(onbStepAt()));
     card.append(h("div", { class: "onb-progress", "aria-hidden": "true" }, steps.map((_, i) => h("i", { class: i < idx || (!done && i === idx) ? "on" : "" }))));
     const step = h("div", { class: "onb-step" });
     card.append(step);
@@ -669,10 +671,18 @@
     const first = step.querySelector("input");
     if (first) first.focus();
   }
+  // Two ways in, side by side: most people who already use the CLI or another browser have a key.
+  function onbChoice(active) {
+    const opt = (step, ic, label, sub) => h("button", { type: "button", class: "onb-choice-opt", "aria-pressed": String(active === step),
+      onclick: () => { if (active !== step) onbGo(step); } }, icon(ic), h("span", null, h("strong", { text: label }), h("small", { text: sub })));
+    return h("div", { class: "onb-choice", role: "group", "aria-label": "How do you want to sign in?" },
+      opt("email", "i-mail", "Email me a key", "First time here"),
+      opt("key", "i-key", "I have a key", "From the CLI or another browser"));
+  }
   function onbGo(step, error) { S.onb.step = step; S.onb.error = error || ""; renderOnbStep(); }
   // Back to the previous onboarding step; none on the first one.
   function onbBack() {
-    const steps = onbSteps(), i = steps.indexOf(S.onb.step);
+    const steps = onbSteps(), i = steps.indexOf(onbStepAt());
     if (i <= 0) return null;
     return btn("Back", { cls: "btn-ghost btn-lg", icon: "i-left", onclick: () => onbGo(steps[i - 1]) });
   }
@@ -728,7 +738,8 @@
     input.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); });
     input.addEventListener("input", () => { input.removeAttribute("aria-invalid"); msg.textContent = ""; });
     add(root, [
-      h("h2", { text: "Sign in with your work email" }),
+      h("h2", { text: "Sign in to Lilypad" }),
+      onbChoice("email"),
       h("p", { class: "lead", text: "We'll email you an access key. No password, nothing to install." }),
       h("div", { class: "field" }, h("label", { for: "onb-email", text: "Work email" }), input, msg,
         h("span", { class: "hint", text: "Your exact @" + EMAIL_DOMAIN + " address. Asking again sends the key you already have while it is valid." })),
@@ -736,7 +747,6 @@
         h("span", { class: "hint", text: "Only if your key leaked: every saved copy, on any machine, stops working." })),
       err,
       h("div", { class: "onb-actions" }, onbBack(), send),
-      h("p", { class: "onb-alt" }, "Already have a key? ", h("button", { class: "linklike", type: "button", text: "Paste it instead", onclick: () => onbGo("key") })),
     ]);
   }
 
@@ -769,17 +779,26 @@
     };
     verify.addEventListener("click", submit);
     input.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); });
+    const sent = S.onb.sent;
     add(root, [
-      h("h2", { text: "Paste your access key" }),
-      h("p", { class: "lead", text: "It's in the email from Lilypad, subject “Your Lilypad access key”." }),
-      S.onb.sent ? h("div", { class: "mailbox" }, icon("i-mail"), h("div", null, h("strong", { text: "Check " + S.onb.email }),
+      h("h2", { text: sent ? "Paste your access key" : "Sign in to Lilypad" }),
+      sent ? null : onbChoice("key"),
+      h("p", { class: "lead", text: sent ? "It's in the email from Lilypad, subject “Your Lilypad access key”."
+        : "Use the same key as the CLI or another browser. One key works everywhere, so you don't need a new one." }),
+      sent ? null : h("details", { class: "onb-find" }, h("summary", { text: "Where do I find my key?" }),
+        h("ul", null,
+          h("li", null, "In the email from Lilypad, subject ", h("strong", { text: "“Your Lilypad access key”" }), "."),
+          h("li", null, "On a machine where the CLI is signed in: ", h("code", { text: "cat ~/.config/lilypad/key" }),
+            " (Windows: ", h("code", { text: "type %APPDATA%\\lilypad\\key" }), ")."),
+          h("li", null, "Lost it? Choose ", h("strong", { text: "Email me a key" }), ": you get the same key again, and the CLI keeps working."))),
+      sent ? h("div", { class: "mailbox" }, icon("i-mail"), h("div", null, h("strong", { text: "Check " + S.onb.email }),
         h("div", { text: (S.onb.reused ? "We sent your current key again; copies you saved elsewhere still work. " : "We sent a new key; any older key has stopped working. ") +
           "It usually arrives within a minute. Not there? Look in spam or junk." }))) : null,
       h("div", { class: "field" }, h("label", { for: "onb-key", text: "Access key" }), h("div", { class: "input-group" }, input, eye),
         h("span", { class: "hint", text: "Starts with lpk_ and works for 30 days. Saved in this browser only." })),
       err,
       h("div", { class: "onb-actions" }, onbBack(), verify),
-      h("p", { class: "onb-alt" }, "No email? ", h("button", { class: "linklike", type: "button", text: "Send it again", onclick: () => onbGo("email") }), " (one per minute)."),
+      sent ? h("p", { class: "onb-alt" }, "No email? ", h("button", { class: "linklike", type: "button", text: "Send it again", onclick: () => onbGo("email") }), " (one per minute).") : null,
     ]);
   }
 
